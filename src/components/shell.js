@@ -21,7 +21,7 @@ export function renderShellHeader(opts) {
   <header class="sticky top-0 z-40 shadow-sm">
     <div class="bg-sia-navy text-white text-xs">
       <div class="max-w-7xl mx-auto px-4 flex justify-end gap-6 py-2 items-center">
-        <a href="#" data-nav="utility" class="hover:underline">KrisFlyer</a>
+    
         <button type="button" id="debug-launcher-recovery" class="hidden hover:underline text-white" aria-label="Show debug panel">Debug</button>
         ${authLinks}
         <button type="button" class="inline-flex items-center gap-1 hover:underline" aria-label="Language">
@@ -37,7 +37,7 @@ export function renderShellHeader(opts) {
         </button>
         <nav class="flex flex-wrap items-center gap-4 md:gap-8 text-sm" aria-label="Primary">
           <a href="#/home" data-route="HOME" class="${navCls('HOME')}">Book</a>
-          <a href="#/search-results" data-route="SEARCH_RESULTS" class="${navCls('SEARCH_RESULTS')}">Flight results</a>
+         
           <a href="#" data-nav="decor" class="hidden sm:inline text-sia-text-muted hover:text-sia-navy">Experience</a>
           <a href="#" data-nav="decor" class="hidden sm:inline text-sia-text-muted hover:text-sia-navy">Discover</a>
         </nav>
@@ -58,10 +58,10 @@ export function renderShellFooter() {
   return `
   <footer class="bg-sia-navy text-sia-border mt-auto">
     <div class="max-w-7xl mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8">
-      ${col('Company', ['About Us', 'Careers', 'Investor Relations', 'Press'])} 
-      ${col('Group Partners', ['Scoot', 'SIA Cargo', 'KrisFlyer'])} 
-      ${col('Where We Fly', ['Route Map', 'Flight Schedules', 'Timetables'])} 
-      ${col('Support', ['Help Centre', 'Contact Us', 'FAQs', 'Baggage'])} 
+      ${col('Customer Service', ['About Us', 'Rescue Assistance', 'Lost and Found', 'Contact Us'])} 
+      ${col('About Us', ['Service Locations', 'Talent Recruitment', 'Privacy Policy'])} 
+      ${col('Our Services', ['Daily Rental', 'Shared Cars', 'Car Subscription'])} 
+      ${col('News Center', ['Press Release', 'News Reports', 'Annual Reports', 'ESG'])} 
     </div>
     <div class="border-t border-white/10">
       <div class="max-w-7xl mx-auto px-4 py-6 flex flex-wrap items-center justify-between gap-4 text-xs">

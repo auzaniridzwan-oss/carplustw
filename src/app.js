@@ -672,7 +672,7 @@ function render() {
     stepContent = `
       <section class="hero-carousel" style="background-image: linear-gradient(90deg, rgba(0, 38, 99, 0.65), rgba(0, 38, 99, 0.25)), url('${slide.imageUrl}')">
         <div class="hero-carousel-content">
-          <p class="hero-eyebrow">Taiwan Car Rental Offers</p>
+          <p class="hero-eyebrow">Carplus Rental Offers</p>
           <h2>${slide.title}</h2>
           <p>${slide.subtitle}</p>
           <div class="hero-carousel-actions">
@@ -707,7 +707,6 @@ function render() {
       <header class="sticky top-0 z-40 shadow-sm">
         <div class="bg-sia-navy text-white text-xs">
           <div class="max-w-7xl mx-auto px-4 flex flex-wrap justify-end gap-y-2 gap-x-4 md:gap-x-6 py-2 items-center">
-            <a href="#" data-header-link="kris-flyer" class="hover:underline shrink-0">KrisFlyer</a>
             <button type="button" id="header-debug-toggle" class="shrink-0 bg-transparent border-0 cursor-pointer hover:underline text-white font-sans text-xs p-0" aria-expanded="false" aria-controls="debug-drawer">Debug</button>
             <a href="#" data-header-link="login" class="hover:underline shrink-0">Login</a>
             <a href="#" data-header-link="private-hire" class="hover:underline shrink-0 hidden sm:inline">Private Car Hire</a>

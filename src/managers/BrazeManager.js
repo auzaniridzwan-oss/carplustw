@@ -44,6 +44,28 @@ class BrazeManagerClass {
   }
 
   /**
+   * Logs successful Braze SDK method execution with consistent shape.
+   * @param {string} method
+   * @param {Record<string, unknown>} [data]
+   * @param {'[SDK]'|'[AUTH]'} [category]
+   * @returns {void}
+   */
+  logSdkSuccess(method, data = {}, category = '[SDK]') {
+    AppLogger.info(category, `Braze SDK call succeeded: ${method}`, data);
+  }
+
+  /**
+   * @param {string} externalId
+   * @returns {string}
+   */
+  maskExternalId(externalId) {
+    if (!externalId) return '';
+    const id = String(externalId);
+    if (id.length <= 3) return `${id[0] ?? ''}***`;
+    return `${id.slice(0, 3)}***`;
+  }
+
+  /**
    * @param {string} eventType
    * @param {Function} callback
    * @returns {() => void}
@@ -96,6 +118,7 @@ class BrazeManagerClass {
       });
       this._initialized = ok;
       if (ok) {
+        this.logSdkSuccess('initialize', { baseUrl });
 
         this.configIAM();
         AppLogger.info('[SDK]', 'Braze Web SDK initialized', { baseUrl });
@@ -109,9 +132,14 @@ class BrazeManagerClass {
 
   configIAM() {
     braze.automaticallyShowInAppMessages();
+    this.logSdkSuccess('automaticallyShowInAppMessages');
     try {
       braze.subscribeToInAppMessage((inAppMessage) => {
+        this.logSdkSuccess('subscribeToInAppMessage.callback');
         braze.showInAppMessage(inAppMessage);
+        this.logSdkSuccess('showInAppMessage', {
+          hasExtras: !!inAppMessage?.extras && typeof inAppMessage.extras === 'object',
+        });
 
         AppLogger.info('[SDK]', 'Getting InAppMessage Extras ', inAppMessage.extras);
 
@@ -130,6 +158,7 @@ class BrazeManagerClass {
         this.notify(IAM_RECEIVED, { promo, at: Date.now() });
         AppLogger.info('[SDK]', 'InAppMessage received', inAppMessage.message);
       });
+      this.logSdkSuccess('subscribeToInAppMessage');
     } catch (e) {
       AppLogger.debug('[SDK]', 'subscribeToInAppMessage unavailable', e);
     }
@@ -143,9 +172,13 @@ class BrazeManagerClass {
     try {
       if (typeof braze.changeUser === 'function') {
         braze.changeUser(externalId);
+        const externalIdPreview = this.maskExternalId(externalId);
+        this.logSdkSuccess('changeUser', { externalIdPreview }, '[AUTH]');
       }
       braze.openSession();
-      AppLogger.info('[AUTH]', 'Braze login / session opened', { externalIdPreview: `${externalId}…` });
+      const externalIdPreview = this.maskExternalId(externalId);
+      this.logSdkSuccess('openSession', { externalIdPreview }, '[AUTH]');
+      AppLogger.info('[AUTH]', 'Braze login / session opened', { externalIdPreview });
     } catch (e) {
       AppLogger.warn('[AUTH]', 'Braze login failed', e);
     }
@@ -159,6 +192,7 @@ class BrazeManagerClass {
     try {
       if (typeof braze.wipeData === 'function') {
         braze.wipeData();
+        this.logSdkSuccess('wipeData');
       }
     } catch (e) {
       AppLogger.warn('[SDK]', 'Braze wipeData failed', e);
@@ -173,7 +207,13 @@ class BrazeManagerClass {
   setCustomAttribute(key, value) {
     try {
       const user = braze.getUser?.();
-      user?.setCustomUserAttribute?.(key, value);
+      if (user) {
+        this.logSdkSuccess('getUser', { found: true, purpose: 'setCustomAttribute' });
+      }
+      if (typeof user?.setCustomUserAttribute === 'function') {
+        user.setCustomUserAttribute(key, value);
+        this.logSdkSuccess('setCustomUserAttribute', { key });
+      }
     } catch (e) {
       AppLogger.warn('[SDK]', 'setCustomAttribute failed', e);
     }
@@ -185,7 +225,10 @@ class BrazeManagerClass {
    */
   requestImmediateDataFlush() {
     try {
-      braze.requestImmediateDataFlush?.();
+      if (typeof braze.requestImmediateDataFlush === 'function') {
+        braze.requestImmediateDataFlush();
+        this.logSdkSuccess('requestImmediateDataFlush');
+      }
     } catch (e) {
       AppLogger.warn('[SDK]', 'requestImmediateDataFlush failed', e);
     }
@@ -200,6 +243,7 @@ class BrazeManagerClass {
     try {
       if (typeof braze.logCustomEvent === 'function') {
         braze.logCustomEvent(name, props);
+        this.logSdkSuccess('logCustomEvent', { name });
       }
     } catch (e) {
       AppLogger.warn('[SDK]', 'logCustomEvent failed', e);
@@ -212,6 +256,7 @@ class BrazeManagerClass {
     try {
       const user = braze.getUser?.();
       if (!user) return {};
+      this.logSdkSuccess('getUser', { found: true, purpose: 'getUserData' });
       return {
         userId: user.getUserId?.() ?? null,
       };
@@ -239,15 +284,31 @@ class BrazeManagerClass {
     const externalId = profile.email.trim().toLowerCase();
     try {
       braze.changeUser(externalId);
+      const externalIdPreview = this.maskExternalId(externalId);
+      this.logSdkSuccess('changeUser', { externalIdPreview }, '[AUTH]');
       braze.openSession();
+      this.logSdkSuccess('openSession', { externalIdPreview }, '[AUTH]');
 
       const user = braze.getUser?.();
       if (user) {
-        user.setEmail?.(profile.email.trim().toLowerCase());
-        user.setFirstName?.(profile.firstName.trim());
-        user.setLastName?.(profile.lastName.trim());
+        this.logSdkSuccess('getUser', { found: true, purpose: 'completeRegistration' });
+        if (typeof user.setEmail === 'function') {
+          user.setEmail(profile.email.trim().toLowerCase());
+          this.logSdkSuccess('setEmail', { hasValue: true });
+        }
+        if (typeof user.setFirstName === 'function') {
+          user.setFirstName(profile.firstName.trim());
+          this.logSdkSuccess('setFirstName', { hasValue: true });
+        }
+        if (typeof user.setLastName === 'function') {
+          user.setLastName(profile.lastName.trim());
+          this.logSdkSuccess('setLastName', { hasValue: true });
+        }
         if (profile.phone) {
-          user.setPhoneNumber?.(profile.phone);
+          if (typeof user.setPhoneNumber === 'function') {
+            user.setPhoneNumber(profile.phone);
+            this.logSdkSuccess('setPhoneNumber', { hasValue: true });
+          }
         }
       }
 

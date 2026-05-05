@@ -39,7 +39,16 @@ export function renderDebugOverlay() {
         <pre id="debug-rest-profile" class="bg-gray-100 p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-48"></pre>
       </div>
       <div class="flex-1 min-h-0 flex flex-col">
-        <h3 class="font-medium text-sia-text mb-1">Custom events (live)</h3>
+        <h3 class="font-medium text-sia-text mb-1 flex items-center gap-1.5">
+          <span>Custom events (live)</span>
+          <span
+            id="debug-event-update-indicator"
+            class="inline-flex items-center justify-center text-amber-500 opacity-0 transition-opacity duration-200"
+            aria-hidden="true"
+          >
+            <i class="fa-solid fa-bell"></i>
+          </span>
+        </h3>
         <ul id="debug-event-log" class="space-y-1 flex-1 min-h-0 overflow-y-auto"></ul>
       </div>
     </div>

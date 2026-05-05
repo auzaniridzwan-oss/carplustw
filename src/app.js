@@ -40,6 +40,7 @@ let carouselIndex = 0;
 let isDebugDrawerOpen = false;
 let loginSuccessMessage = '';
 let loginSuccessMessageTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
+let debugEventIndicatorTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 
 /** Max entries retained for the debug drawer custom event list. */
 const CUSTOM_EVENT_LOG_MAX = 80;
@@ -412,6 +413,26 @@ function appendCustomEventLogged(payload) {
     customEventLogBuffer.shift();
   }
   syncDebugEventLogUi();
+  flashDebugEventIndicator();
+}
+
+/**
+ * Flashes the custom-events indicator icon when a new event is logged.
+ * @returns {void}
+ */
+function flashDebugEventIndicator() {
+  const indicator = document.getElementById('debug-event-update-indicator');
+  if (!indicator) return;
+  indicator.classList.remove('opacity-0');
+  indicator.classList.add('opacity-100', 'animate-pulse');
+  if (debugEventIndicatorTimer) {
+    clearTimeout(debugEventIndicatorTimer);
+  }
+  debugEventIndicatorTimer = setTimeout(() => {
+    indicator.classList.remove('opacity-100', 'animate-pulse');
+    indicator.classList.add('opacity-0');
+    debugEventIndicatorTimer = null;
+  }, 900);
 }
 
 /**

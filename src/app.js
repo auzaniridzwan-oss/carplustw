@@ -331,7 +331,7 @@ function syncDebugEventLogUi() {
     const li = document.createElement('li');
     li.className = 'text-[0.65rem] border-b border-gray-100 pb-1 mb-1';
     const propsStr = e.props != null ? formatDebugJson(e.props) : '';
-    li.innerHTML = `<span class="font-medium text-sia-navy">${escapeHtmlForDebug(e.name)}</span> <span class="text-sia-text-muted">${new Date(e.at).toISOString()}</span><pre class="mt-0.5 whitespace-pre-wrap break-words font-mono bg-gray-50 p-1 rounded max-h-24 overflow-y-auto">${escapeHtmlForDebug(propsStr)}</pre>`;
+    li.innerHTML = `<span class="font-medium text-sia-navy">${escapeHtmlForDebug(e.name)}</span> <span class="text-sia-text-muted">${new Date(e.at).toISOString()}</span><pre class="mt-0.5 whitespace-pre-wrap break-words font-mono bg-gray-50 p-1 rounded">${escapeHtmlForDebug(propsStr)}</pre>`;
     ul.appendChild(li);
   }
 }

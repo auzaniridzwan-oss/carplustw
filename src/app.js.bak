@@ -693,14 +693,18 @@ function render() {
         </div>
       </header>
       <main class="flex-1 w-full px-4 py-6 md:py-8">
-        
-        ${loginSuccessMessage
-      ? `<div class="mb-4 rounded-sm border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status" aria-live="polite">
+        <header class="page-header">
+          <h1>Taiwan Car Rental</h1>
+          <p>Book your ride with transparent NTD pricing.</p>
+        </header>
+        ${
+          loginSuccessMessage
+            ? `<div class="mb-4 rounded-sm border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status" aria-live="polite">
                 ${escapeHtmlForDebug(loginSuccessMessage)}
               </div>`
-      : ''
-    }
-       
+            : ''
+        }
+        <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
         ${stepContent}
       </main>
       ${renderLoginModal()}
@@ -799,7 +803,7 @@ function bindGlobalUiActions() {
     });
     document.querySelectorAll('[data-carousel-index]').forEach((dot) => {
       dot.addEventListener('click', () => {
-        const nextIndex = Number(/** @type {HTMLElement} */(dot).dataset.carouselIndex);
+        const nextIndex = Number(/** @type {HTMLElement} */ (dot).dataset.carouselIndex);
         if (Number.isNaN(nextIndex)) return;
         carouselIndex = nextIndex;
         render();
@@ -890,7 +894,7 @@ function bindAddonsStep() {
   document.querySelectorAll('[data-addon-id]').forEach((input) => {
     input.addEventListener('change', () => {
       const ids = Array.from(document.querySelectorAll('[data-addon-id]:checked')).map(
-        (node) => /** @type {HTMLElement} */(node).dataset.addonId,
+        (node) => /** @type {HTMLElement} */ (node).dataset.addonId,
       );
       StorageManager.set(STORAGE_KEYS.ADDONS, ids.filter(Boolean));
       recalculatePricing();
@@ -1077,7 +1081,7 @@ export function bootstrapApp() {
   BrazeManager.initialize(apiKey, baseUrl);
   BrazeManager.syncUserFromStorage();
   BrazeManager.subscribe(EVENT_LOGGED, (payload) => {
-    appendCustomEventLogged(/** @type {{ name?: string, props?: Record<string, unknown> }} */(payload));
+    appendCustomEventLogged(/** @type {{ name?: string, props?: Record<string, unknown> }} */ (payload));
   });
   hydratePersistedStep();
   recalculatePricing();

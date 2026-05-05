@@ -6,6 +6,7 @@ import { renderPaymentStep } from './components/paymentStep.js';
 import { renderThankYouStep } from './components/thankYouStep.js';
 import { renderDebugOverlay, formatDebugJson } from './components/debugOverlay.js';
 import { renderLoginModal } from './components/loginModal.js';
+import { renderShellFooter } from './components/shell.js';
 import { TAIWAN_LOCATIONS } from './data/taiwanLocations.js';
 import { CARS } from './data/cars.js';
 import { RENTAL_ADDONS } from './data/addons.js';
@@ -668,32 +669,47 @@ function render() {
   }
 
   app.innerHTML = `
-    <div class="rental-app">
-      <header class="top-nav-bar">
-        <div class="top-nav-brand">Carplus Taiwan</div>
-        <nav>
-          <button type="button" id="header-debug-toggle" class="top-nav-bar-btn" aria-expanded="false" aria-controls="debug-drawer">Debug</button>
-          <a href="#" data-header-link="login">Login</a>
-          <a href="#" data-header-link="private-hire">Private Car Hire</a>
-          <a href="#" data-header-link="car-sharing">Car Sharing Service</a>
-          <a href="#" data-header-link="locations">Service Locations</a>
-        </nav>
+    <div class="rental-app flex flex-col min-h-screen w-full max-w-7xl mx-auto bg-sia-muted">
+      <header class="sticky top-0 z-40 shadow-sm">
+        <div class="bg-sia-navy text-white text-xs">
+          <div class="max-w-7xl mx-auto px-4 flex flex-wrap justify-end gap-y-2 gap-x-4 md:gap-x-6 py-2 items-center">
+            <a href="#" data-header-link="kris-flyer" class="hover:underline shrink-0">KrisFlyer</a>
+            <button type="button" id="header-debug-toggle" class="shrink-0 bg-transparent border-0 cursor-pointer hover:underline text-white font-sans text-xs p-0" aria-expanded="false" aria-controls="debug-drawer">Debug</button>
+            <a href="#" data-header-link="login" class="hover:underline shrink-0">Login</a>
+            <a href="#" data-header-link="private-hire" class="hover:underline shrink-0 hidden sm:inline">Private Car Hire</a>
+            <a href="#" data-header-link="car-sharing" class="hover:underline shrink-0 hidden sm:inline">Car Sharing Service</a>
+            <a href="#" data-header-link="locations" class="hover:underline shrink-0">Service Locations</a>
+            <button type="button" class="inline-flex items-center gap-1 hover:underline shrink-0" aria-label="Language">
+              <span>EN</span>
+              <i class="fa-solid fa-chevron-down text-[0.65rem]" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+        <div class="bg-white border-b border-sia-border">
+          <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-4 py-3">
+            <div class="font-display text-xl font-semibold text-sia-navy tracking-tight">Carplus Taiwan</div>
+            <p class="text-sm text-sia-text-muted hidden md:block m-0">Taiwan Car Rental</p>
+          </div>
+        </div>
       </header>
-      <header class="page-header">
-        <h1>Taiwan Car Rental</h1>
-        <p>Book your ride with transparent NTD pricing.</p>
-      </header>
-      ${
-        loginSuccessMessage
-          ? `<div class="mb-4 rounded-sm border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status" aria-live="polite">
-              ${escapeHtmlForDebug(loginSuccessMessage)}
-            </div>`
-          : ''
-      }
-      <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
-      ${stepContent}
+      <main class="flex-1 w-full px-4 py-6 md:py-8">
+        <header class="page-header">
+          <h1>Taiwan Car Rental</h1>
+          <p>Book your ride with transparent NTD pricing.</p>
+        </header>
+        ${
+          loginSuccessMessage
+            ? `<div class="mb-4 rounded-sm border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status" aria-live="polite">
+                ${escapeHtmlForDebug(loginSuccessMessage)}
+              </div>`
+            : ''
+        }
+        <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
+        ${stepContent}
+      </main>
       ${renderLoginModal()}
       ${renderDebugOverlay()}
+      ${renderShellFooter()}
     </div>
   `;
 }

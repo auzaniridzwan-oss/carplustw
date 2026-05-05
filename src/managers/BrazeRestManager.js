@@ -7,18 +7,52 @@ export const BrazeRestManager = {
 
   /**
    * @param {string} externalId
+   * @returns {string}
+   */
+  normalizeExternalId(externalId) {
+    return String(externalId || '').trim();
+  },
+
+  /**
+   * @param {unknown} body
+   * @returns {boolean}
+   */
+  isEmptyUserExport(body) {
+    if (!body || typeof body !== 'object' || !('users' in body)) return true;
+    const users = /** @type {{ users?: unknown[] }} */ (body).users;
+    return !Array.isArray(users) || users.length === 0;
+  },
+
+  /**
+   * @param {string} externalId
+   * @returns {void}
+   */
+  clearCacheFor(externalId) {
+    const normalized = this.normalizeExternalId(externalId);
+    if (!normalized) return;
+    if (this._cache?.id === normalized) {
+      this._cache = null;
+    }
+  },
+
+  /**
+   * @param {string} externalId
    * @returns {Promise<unknown>}
    */
   async fetchUserProfile(externalId) {
     if (!externalId || typeof externalId !== 'string') {
       throw new Error('external_id required');
     }
+    const normalizedId = this.normalizeExternalId(externalId);
+    if (!normalizedId) {
+      throw new Error('external_id required');
+    }
     const now = Date.now();
-    if (this._cache && this._cache.id === externalId && now - this._cache.at < this.TTL_MS) {
+    if (this._cache && this._cache.id === normalizedId && now - this._cache.at < this.TTL_MS) {
       return this._cache.data;
     }
 
-    const url = `/api/braze/user-data?id=${encodeURIComponent(externalId.trim())}`;
+    const url = `/api/braze/user-data?id=${encodeURIComponent(normalizedId)}`;
     const res = await fetch(url, { method: 'GET' });
     if (res.status === 429) {
       throw new Error('Rate limited — try later');
@@ -28,7 +62,7 @@ export const BrazeRestManager = {
       throw new Error(err.error || `HTTP ${res.status}`);
     }
     const data = await res.json();
-    this._cache = { id: externalId, at: now, data };
+    this._cache = { id: normalizedId, at: now, data };
     return data;
   },
 

@@ -55,6 +55,9 @@ let customEventLogBuffer = [];
  * @type {RentalSearchPayload | null}
  */
 let pendingRentalSearchAfterLogin = null;
+let latestDebugRestProfileState = /** @type {'idle'|'loading'|'no_logged_in_user'|'profile_pending_sync'|'proxy_not_configured'|'rate_limited'|'api_error'|'profile_ready'} */ ('idle');
+
+const REST_PROFILE_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 /**
  * Sets a transient login success notice shown in the app shell.
@@ -116,6 +119,22 @@ function writeDebugJson(targetId, data) {
 }
 
 /**
+ * Parses an unknown error into a typed debug REST state.
+ * @param {unknown} error
+ * @returns {{ state: 'proxy_not_configured'|'rate_limited'|'api_error', message: string }}
+ */
+function classifyRestError(error) {
+  const message = String(error || 'Unknown error');
+  if (message.includes('Braze REST proxy not configured')) {
+    return { state: 'proxy_not_configured', message };
+  }
+  if (message.includes('Rate limited')) {
+    return { state: 'rate_limited', message };
+  }
+  return { state: 'api_error', message };
+}
+
+/**
  * Refreshes SDK and REST profile details shown in debug overlay.
  * @param {{ force?: boolean }} [options]
  * @returns {Promise<void>}
@@ -127,26 +146,74 @@ async function refreshDebugProfile(options = {}) {
     ...BrazeManager.getUserData(),
   });
   if (!externalId) {
+    latestDebugRestProfileState = 'no_logged_in_user';
     writeDebugJson('debug-rest-profile', {
+      state: latestDebugRestProfileState,
       info: 'No logged-in user found. Log in to view REST profile.',
     });
     return;
   }
-  const restEl = document.getElementById('debug-rest-profile');
-  if (restEl) {
-    restEl.textContent = 'Loading...';
-  }
-  if (options.force && BrazeRestManager._cache?.id === externalId) {
-    BrazeRestManager._cache = null;
+  latestDebugRestProfileState = 'loading';
+  writeDebugJson('debug-rest-profile', {
+    state: latestDebugRestProfileState,
+    info: 'Loading REST profile...',
+    external_id: externalId,
+  });
+  if (options.force) {
+    BrazeRestManager.clearCacheFor(externalId);
   }
   try {
     const data = await BrazeRestManager.fetchUserProfile(externalId);
-    writeDebugJson('debug-rest-profile', data);
+    if (BrazeRestManager.isEmptyUserExport(data)) {
+      latestDebugRestProfileState = 'profile_pending_sync';
+      writeDebugJson('debug-rest-profile', {
+        state: latestDebugRestProfileState,
+        info: 'Profile not available yet. Braze export may still be syncing after login.',
+        hint: 'Wait a few seconds and refresh again.',
+        external_id: externalId,
+        raw: data,
+      });
+      return;
+    }
+    latestDebugRestProfileState = 'profile_ready';
+    writeDebugJson('debug-rest-profile', {
+      state: latestDebugRestProfileState,
+      external_id: externalId,
+      data,
+    });
   } catch (error) {
+    const parsed = classifyRestError(error);
+    latestDebugRestProfileState = parsed.state;
     writeDebugJson('debug-rest-profile', {
       external_id: externalId,
-      error: String(error),
+      state: latestDebugRestProfileState,
+      error: parsed.message,
+      hint:
+        parsed.state === 'proxy_not_configured'
+          ? 'Ensure /api is reachable and BRAZE_REST_API_KEY/BRAZE_REST_API_URL are configured.'
+          : parsed.state === 'rate_limited'
+            ? 'Retry after a short delay.'
+            : 'Check API/proxy status in browser network logs.',
     });
+  }
+}
+
+/**
+ * Retries REST profile fetch after login because Braze export can lag briefly.
+ * @param {string} externalId
+ * @returns {Promise<void>}
+ */
+async function retryDebugRestProfileHydrationAfterLogin(externalId) {
+  if (!externalId) return;
+  BrazeRestManager.clearCacheFor(externalId);
+  await refreshDebugProfile({ force: true });
+  if (latestDebugRestProfileState !== 'profile_pending_sync') return;
+  for (const delayMs of REST_PROFILE_RETRY_DELAYS_MS) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    await refreshDebugProfile({ force: true });
+    if (latestDebugRestProfileState !== 'profile_pending_sync') {
+      return;
+    }
   }
 }
 
@@ -372,6 +439,7 @@ function completeLoginSuccess(email) {
   BrazeManager.requestImmediateDataFlush();
   AppLogger.info('[AUTH]', 'User logged in', { externalIdPreview: `${normalized.slice(0, 3)}…` });
   setLoginSuccessNotice(`Login successful. Welcome, ${normalized}.`);
+  void retryDebugRestProfileHydrationAfterLogin(normalized);
   closeLoginModal();
   document.getElementById('login-email-err')?.classList.add('hidden');
   document.getElementById('login-form-err')?.classList.add('hidden');

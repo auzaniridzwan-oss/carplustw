@@ -48,6 +48,42 @@
   color: #1f2937;
 }
 
+.top-nav-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #002663;
+  color: #fff;
+  border-radius: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.top-nav-brand {
+  font-weight: 700;
+  color: #ddb067;
+}
+
+.top-nav-bar nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.top-nav-bar a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.top-nav-bar a:hover {
+  color: #ddb067;
+}
+
 .page-header h1 {
   margin: 0;
   font-size: 2rem;
@@ -75,6 +111,60 @@
 .panel h2 {
   margin-top: 0;
   color: #0f2350;
+}
+
+.hero-carousel {
+  min-height: 260px;
+  border-radius: 0.8rem;
+  margin-bottom: 1rem;
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  display: flex;
+  align-items: center;
+}
+
+.hero-carousel-content {
+  padding: 1.25rem;
+  max-width: 580px;
+}
+
+.hero-carousel-content h2 {
+  margin: 0.3rem 0;
+}
+
+.hero-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #ddb067;
+  font-size: 0.78rem;
+  margin: 0;
+}
+
+.hero-carousel-actions {
+  margin-top: 0.8rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.carousel-dots {
+  margin-top: 0.7rem;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.carousel-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  border: 1px solid #fff;
+  background: transparent;
+  cursor: pointer;
+}
+
+.carousel-dot.active {
+  background: #ddb067;
+  border-color: #ddb067;
 }
 
 .muted {
@@ -176,6 +266,37 @@
   gap: 0.7rem;
 }
 
+.promo-grid {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.promo-card {
+  border: 1px solid #e0e0e0;
+  background: #f4f1ea;
+  border-radius: 0.8rem;
+  padding: 0.95rem;
+}
+
+.promo-card i {
+  color: #002663;
+  font-size: 1.2rem;
+}
+
+.promo-card h3 {
+  margin: 0.45rem 0 0.35rem;
+  color: #002663;
+  font-size: 1rem;
+}
+
+.promo-card p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.9rem;
+}
+
 .addon-item {
   border: 1px solid #d1d5db;
   border-radius: 0.6rem;
@@ -216,5 +337,14 @@
   .grid-form,
   .summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .promo-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .top-nav-bar {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

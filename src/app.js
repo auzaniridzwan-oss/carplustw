@@ -4,6 +4,7 @@ import { renderAddonsStep } from './components/addonsStep.js';
 import { renderConfirmationStep } from './components/confirmationStep.js';
 import { renderPaymentStep } from './components/paymentStep.js';
 import { renderThankYouStep } from './components/thankYouStep.js';
+import { renderDebugOverlay } from './components/debugOverlay.js';
 import { TAIWAN_LOCATIONS } from './data/taiwanLocations.js';
 import { CARS } from './data/cars.js';
 import { RENTAL_ADDONS } from './data/addons.js';
@@ -32,6 +33,52 @@ const STORAGE_KEYS = {
 /** @type {keyof typeof STEPS} */
 let currentStep = STEPS.SEARCH;
 let isPaymentProcessing = false;
+let carouselIndex = 0;
+
+const CAROUSEL_SLIDES = [
+  {
+    id: 'city-drive',
+    title: 'City Drives, Zero Hassle',
+    subtitle: 'Pick up in Taipei and drop off island-wide.',
+    imageUrl:
+      'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80',
+  },
+  {
+    id: 'family-trip',
+    title: 'Family Road Trips in Comfort',
+    subtitle: 'Roomy SUVs and child-seat options for safe travel.',
+    imageUrl:
+      'https://images.unsplash.com/photo-1462396881884-de2c07cb95ed?auto=format&fit=crop&w=1600&q=80',
+  },
+  {
+    id: 'business-ride',
+    title: 'Business Travel, On Time',
+    subtitle: 'Premium rentals with flexible duration and add-ons.',
+    imageUrl:
+      'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1600&q=80',
+  },
+];
+
+const PROMOTIONAL_CARDS = [
+  {
+    id: 'airport-transfer',
+    title: 'Airport Pickup Package',
+    description: 'Fast pickup lanes at Taoyuan and Songshan with optional GPS included.',
+    icon: 'fa-plane-arrival',
+  },
+  {
+    id: 'long-term-rental',
+    title: 'Long-term Rental Savings',
+    description: 'Book 7+ days and unlock better daily rates for island-wide travel.',
+    icon: 'fa-calendar-check',
+  },
+  {
+    id: 'family-protection',
+    title: 'Family Safety Bundle',
+    description: 'Add insurance and child seats in one tap for peace of mind.',
+    icon: 'fa-shield-heart',
+  },
+];
 
 /**
  * @returns {{pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string,rentalDays:number}|null}
@@ -241,7 +288,35 @@ function render() {
 
   let stepContent = '';
   if (currentStep === STEPS.SEARCH) {
-    stepContent = renderRentalSearch(TAIWAN_LOCATIONS, search);
+    const slide = CAROUSEL_SLIDES[carouselIndex];
+    const dots = CAROUSEL_SLIDES.map(
+      (item, idx) =>
+        `<button class="carousel-dot ${idx === carouselIndex ? 'active' : ''}" data-carousel-index="${idx}" aria-label="View ${item.title}"></button>`,
+    ).join('');
+    const promoCards = PROMOTIONAL_CARDS.map(
+      (card) => `
+        <article class="promo-card">
+          <i class="fa-solid ${card.icon}" aria-hidden="true"></i>
+          <h3>${card.title}</h3>
+          <p>${card.description}</p>
+        </article>`,
+    ).join('');
+    stepContent = `
+      <section class="hero-carousel" style="background-image: linear-gradient(90deg, rgba(0, 38, 99, 0.65), rgba(0, 38, 99, 0.25)), url('${slide.imageUrl}')">
+        <div class="hero-carousel-content">
+          <p class="hero-eyebrow">Taiwan Car Rental Offers</p>
+          <h2>${slide.title}</h2>
+          <p>${slide.subtitle}</p>
+          <div class="hero-carousel-actions">
+            <button class="carousel-btn secondary-btn" id="carousel-prev">Previous</button>
+            <button class="carousel-btn primary-btn" id="carousel-next">Next</button>
+          </div>
+          <div class="carousel-dots">${dots}</div>
+        </div>
+      </section>
+      ${renderRentalSearch(TAIWAN_LOCATIONS, search)}
+      <section class="promo-grid">${promoCards}</section>
+    `;
   } else if (currentStep === STEPS.CARS) {
     stepContent = renderCarList(CARS, selectedCar?.id ?? null, search);
   } else if (currentStep === STEPS.ADDONS) {
@@ -261,14 +336,90 @@ function render() {
 
   app.innerHTML = `
     <div class="rental-app">
+      <header class="top-nav-bar">
+        <div class="top-nav-brand">Carplus Taiwan</div>
+        <nav>
+          <a href="#" data-header-link="login">Login</a>
+          <a href="#" data-header-link="private-hire">Private Car Hire</a>
+          <a href="#" data-header-link="car-sharing">Car Sharing Service</a>
+          <a href="#" data-header-link="locations">Service Locations</a>
+        </nav>
+      </header>
       <header class="page-header">
         <h1>Taiwan Car Rental</h1>
         <p>Book your ride with transparent NTD pricing.</p>
       </header>
       <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
       ${stepContent}
+      ${renderDebugOverlay()}
     </div>
   `;
+}
+
+/**
+ * @returns {void}
+ */
+function bindGlobalUiActions() {
+  document.querySelectorAll('[data-header-link]').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const key = /** @type {HTMLElement} */ (link).dataset.headerLink;
+      AppLogger.info('[UI]', 'Header link clicked', { key });
+      if (key === 'login') {
+        alert('Login flow will be connected next.');
+      } else if (key === 'locations') {
+        alert('Service locations: Taipei, Taichung, Tainan, and Kaohsiung.');
+      } else {
+        alert('This section is coming soon.');
+      }
+    });
+  });
+
+  const drawer = document.getElementById('debug-drawer');
+  const trigger = document.getElementById('debug-drawer-trigger');
+  if (trigger) trigger.classList.remove('hidden');
+  trigger?.addEventListener('click', () => {
+    drawer?.classList.remove('-translate-x-full');
+    StorageManager.set('debug_launcher_hidden', false);
+  });
+  document.getElementById('debug-drawer-close')?.addEventListener('click', () => {
+    drawer?.classList.add('-translate-x-full');
+    StorageManager.set('debug_launcher_hidden', true);
+  });
+  document.getElementById('debug-hide-launcher')?.addEventListener('click', () => {
+    trigger?.classList.add('hidden');
+    StorageManager.set('debug_launcher_hidden', true);
+  });
+  document.getElementById('debug-show-launcher')?.addEventListener('click', () => {
+    trigger?.classList.remove('hidden');
+    StorageManager.set('debug_launcher_hidden', false);
+  });
+
+  if (StorageManager.get('debug_launcher_hidden', false)) {
+    trigger?.classList.add('hidden');
+  }
+
+  if (currentStep === STEPS.SEARCH) {
+    document.getElementById('carousel-prev')?.addEventListener('click', () => {
+      carouselIndex = (carouselIndex - 1 + CAROUSEL_SLIDES.length) % CAROUSEL_SLIDES.length;
+      render();
+      bindStepActions();
+    });
+    document.getElementById('carousel-next')?.addEventListener('click', () => {
+      carouselIndex = (carouselIndex + 1) % CAROUSEL_SLIDES.length;
+      render();
+      bindStepActions();
+    });
+    document.querySelectorAll('[data-carousel-index]').forEach((dot) => {
+      dot.addEventListener('click', () => {
+        const nextIndex = Number(/** @type {HTMLElement} */ (dot).dataset.carouselIndex);
+        if (Number.isNaN(nextIndex)) return;
+        carouselIndex = nextIndex;
+        render();
+        bindStepActions();
+      });
+    });
+  }
 }
 
 /**
@@ -502,6 +653,7 @@ function bindThankYouStep() {
  * @returns {void}
  */
 function bindStepActions() {
+  bindGlobalUiActions();
   if (currentStep === STEPS.SEARCH) bindSearchStep();
   if (currentStep === STEPS.CARS) bindCarStep();
   if (currentStep === STEPS.ADDONS) bindAddonsStep();

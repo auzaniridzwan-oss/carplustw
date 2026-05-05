@@ -84,6 +84,20 @@
   color: #ddb067;
 }
 
+.top-nav-bar-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  font-size: 0.9rem;
+  font-family: inherit;
+  padding: 0;
+}
+
+.top-nav-bar-btn:hover {
+  color: #ddb067;
+}
+
 .page-header h1 {
   margin: 0;
   font-size: 2rem;

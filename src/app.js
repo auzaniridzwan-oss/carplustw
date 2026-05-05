@@ -5,12 +5,14 @@ import { renderConfirmationStep } from './components/confirmationStep.js';
 import { renderPaymentStep } from './components/paymentStep.js';
 import { renderThankYouStep } from './components/thankYouStep.js';
 import { renderDebugOverlay } from './components/debugOverlay.js';
+import { renderLoginModal } from './components/loginModal.js';
 import { TAIWAN_LOCATIONS } from './data/taiwanLocations.js';
 import { CARS } from './data/cars.js';
 import { RENTAL_ADDONS } from './data/addons.js';
 import { StorageManager } from './managers/StorageManager.js';
 import { AppLogger } from './managers/AppLogger.js';
-import { BrazeManager } from './managers/BrazeManager.js';
+import { BrazeManager, EVENT_LOGGED } from './managers/BrazeManager.js';
+import { getPersistedExternalId, persistAuthSession } from './logic/userSession.js';
 
 const STEPS = {
   SEARCH: 'SEARCH',
@@ -34,6 +36,21 @@ const STORAGE_KEYS = {
 let currentStep = STEPS.SEARCH;
 let isPaymentProcessing = false;
 let carouselIndex = 0;
+
+/** Max entries retained for the debug drawer custom event list. */
+const CUSTOM_EVENT_LOG_MAX = 80;
+
+/**
+ * @typedef {{ pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string,rentalDays:number }} RentalSearchPayload
+ */
+
+/** @type {{ name: string, props?: Record<string, unknown>, at: number }[]} */
+let customEventLogBuffer = [];
+
+/** Search validated on the form but held until login succeeds.
+ * @type {RentalSearchPayload | null}
+ */
+let pendingRentalSearchAfterLogin = null;
 
 const CAROUSEL_SLIDES = [
   {
@@ -170,6 +187,111 @@ function validateSearchForm(formData) {
       rentalDays: getRentalDays(pickupAt, returnAt),
     },
   };
+}
+
+/**
+ * Escapes text for safe insertion into debug overlay HTML.
+ * @param {string} text
+ * @returns {string}
+ */
+function escapeHtmlForDebug(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Records a Braze custom event for the debug drawer and refreshes the list if mounted.
+ * @param {{ name?: string, props?: Record<string, unknown> }} payload
+ * @returns {void}
+ */
+function appendCustomEventLogged(payload) {
+  const entry = {
+    name: typeof payload?.name === 'string' ? payload.name : '(unknown)',
+    props: payload?.props,
+    at: Date.now(),
+  };
+  customEventLogBuffer.push(entry);
+  if (customEventLogBuffer.length > CUSTOM_EVENT_LOG_MAX) {
+    customEventLogBuffer.shift();
+  }
+  syncDebugEventLogUi();
+}
+
+/**
+ * Rebuilds `#debug-event-log` from `customEventLogBuffer` (newest first).
+ * @returns {void}
+ */
+function syncDebugEventLogUi() {
+  const ul = document.getElementById('debug-event-log');
+  if (!ul) return;
+  ul.innerHTML = '';
+  for (let i = customEventLogBuffer.length - 1; i >= 0; i -= 1) {
+    const e = customEventLogBuffer[i];
+    const li = document.createElement('li');
+    li.className = 'text-[0.65rem] border-b border-gray-100 pb-1 mb-1';
+    let propsStr = '';
+    try {
+      propsStr = e.props != null ? JSON.stringify(e.props) : '';
+    } catch {
+      propsStr = '[unserializable]';
+    }
+    const truncated = propsStr.length > 500 ? `${propsStr.slice(0, 500)}…` : propsStr;
+    li.innerHTML = `<span class="font-medium text-sia-navy">${escapeHtmlForDebug(e.name)}</span> <span class="text-sia-text-muted">${new Date(e.at).toISOString()}</span><pre class="mt-0.5 whitespace-pre-wrap break-all">${escapeHtmlForDebug(truncated)}</pre>`;
+    ul.appendChild(li);
+  }
+}
+
+/**
+ * Shows the login modal overlay.
+ * @returns {void}
+ */
+function showLoginModal() {
+  const el = document.getElementById('login-modal');
+  if (!el) return;
+  el.classList.remove('hidden');
+  el.classList.add('flex');
+  el.setAttribute('aria-hidden', 'false');
+}
+
+/**
+ * Hides the login modal overlay.
+ * @returns {void}
+ */
+function closeLoginModal() {
+  const el = document.getElementById('login-modal');
+  if (!el) return;
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+  el.setAttribute('aria-hidden', 'true');
+}
+
+/**
+ * Completes login: Braze user, persistence, then continues booking if a search was pending.
+ * @param {string} email
+ * @returns {void}
+ */
+function completeLoginSuccess(email) {
+  const normalized = email.trim().toLowerCase();
+  BrazeManager.login(normalized);
+  persistAuthSession(normalized, 'login');
+  BrazeManager.requestImmediateDataFlush();
+  AppLogger.info('[AUTH]', 'User logged in', { externalIdPreview: `${normalized.slice(0, 3)}…` });
+  closeLoginModal();
+  document.getElementById('login-email-err')?.classList.add('hidden');
+  document.getElementById('login-form-err')?.classList.add('hidden');
+  if (pendingRentalSearchAfterLogin) {
+    StorageManager.set(STORAGE_KEYS.SEARCH, pendingRentalSearchAfterLogin);
+    const saved = pendingRentalSearchAfterLogin;
+    pendingRentalSearchAfterLogin = null;
+    AppLogger.info('[UI]', 'Rental search set after login', saved);
+    moveToStep(STEPS.CARS);
+    return;
+  }
+  render();
+  bindStepActions();
 }
 
 /**
@@ -339,6 +461,7 @@ function render() {
       <header class="top-nav-bar">
         <div class="top-nav-brand">Carplus Taiwan</div>
         <nav>
+          <button type="button" id="header-debug-toggle" class="top-nav-bar-btn" aria-expanded="false" aria-controls="debug-drawer">Debug</button>
           <a href="#" data-header-link="login">Login</a>
           <a href="#" data-header-link="private-hire">Private Car Hire</a>
           <a href="#" data-header-link="car-sharing">Car Sharing Service</a>
@@ -351,6 +474,7 @@ function render() {
       </header>
       <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
       ${stepContent}
+      ${renderLoginModal()}
       ${renderDebugOverlay()}
     </div>
   `;
@@ -366,7 +490,7 @@ function bindGlobalUiActions() {
       const key = /** @type {HTMLElement} */ (link).dataset.headerLink;
       AppLogger.info('[UI]', 'Header link clicked', { key });
       if (key === 'login') {
-        alert('Login flow will be connected next.');
+        showLoginModal();
       } else if (key === 'locations') {
         alert('Service locations: Taipei, Taichung, Tainan, and Kaohsiung.');
       } else {
@@ -376,28 +500,56 @@ function bindGlobalUiActions() {
   });
 
   const drawer = document.getElementById('debug-drawer');
-  const trigger = document.getElementById('debug-drawer-trigger');
-  if (trigger) trigger.classList.remove('hidden');
-  trigger?.addEventListener('click', () => {
-    drawer?.classList.remove('-translate-x-full');
-    StorageManager.set('debug_launcher_hidden', false);
-  });
-  document.getElementById('debug-drawer-close')?.addEventListener('click', () => {
-    drawer?.classList.add('-translate-x-full');
-    StorageManager.set('debug_launcher_hidden', true);
-  });
-  document.getElementById('debug-hide-launcher')?.addEventListener('click', () => {
-    trigger?.classList.add('hidden');
-    StorageManager.set('debug_launcher_hidden', true);
-  });
-  document.getElementById('debug-show-launcher')?.addEventListener('click', () => {
-    trigger?.classList.remove('hidden');
-    StorageManager.set('debug_launcher_hidden', false);
+  const debugToggle = /** @type {HTMLButtonElement | null} */ (document.getElementById('header-debug-toggle'));
+
+  /**
+   * @param {boolean} open
+   */
+  const setDebugDrawerOpen = (open) => {
+    if (!drawer) return;
+    if (open) {
+      drawer.classList.remove('-translate-x-full');
+    } else {
+      drawer.classList.add('-translate-x-full');
+    }
+    debugToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  debugToggle?.addEventListener('click', () => {
+    const closed = drawer?.classList.contains('-translate-x-full') ?? true;
+    setDebugDrawerOpen(closed);
   });
 
-  if (StorageManager.get('debug_launcher_hidden', false)) {
-    trigger?.classList.add('hidden');
-  }
+  document.getElementById('debug-drawer-close')?.addEventListener('click', () => {
+    setDebugDrawerOpen(false);
+  });
+
+  document.getElementById('login-modal-close')?.addEventListener('click', () => {
+    closeLoginModal();
+  });
+  document.getElementById('login-cancel')?.addEventListener('click', () => {
+    closeLoginModal();
+  });
+
+  document.getElementById('login-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const emailInput = /** @type {HTMLInputElement | null} */ (document.getElementById('login-email'));
+    const emailErr = document.getElementById('login-email-err');
+    const formErr = document.getElementById('login-form-err');
+    emailErr?.classList.add('hidden');
+    formErr?.classList.add('hidden');
+    const email = emailInput?.value.trim() ?? '';
+    if (!email || !emailInput?.checkValidity()) {
+      if (emailErr) {
+        emailErr.textContent = 'Enter a valid email.';
+        emailErr.classList.remove('hidden');
+      }
+      return;
+    }
+    completeLoginSuccess(email);
+  });
+
+  syncDebugEventLogUi();
 
   if (currentStep === STEPS.SEARCH) {
     document.getElementById('carousel-prev')?.addEventListener('click', () => {
@@ -445,6 +597,12 @@ function bindSearchStep() {
         err.classList.remove('hidden');
       }
       AppLogger.warn('[UI]', 'Search validation failed', payload.error);
+      return;
+    }
+    if (!getPersistedExternalId()) {
+      pendingRentalSearchAfterLogin = payload.payload;
+      showLoginModal();
+      AppLogger.info('[UI]', 'Login required before search', {});
       return;
     }
     StorageManager.set(STORAGE_KEYS.SEARCH, payload.payload);
@@ -682,6 +840,10 @@ export function bootstrapApp() {
   const apiKey = import.meta.env.VITE_BRAZE_SDK_KEY || '';
   const baseUrl = import.meta.env.VITE_BRAZE_SDK_URL || '';
   BrazeManager.initialize(apiKey, baseUrl);
+  BrazeManager.syncUserFromStorage();
+  BrazeManager.subscribe(EVENT_LOGGED, (payload) => {
+    appendCustomEventLogged(/** @type {{ name?: string, props?: Record<string, unknown> }} */ (payload));
+  });
   hydratePersistedStep();
   recalculatePricing();
   render();

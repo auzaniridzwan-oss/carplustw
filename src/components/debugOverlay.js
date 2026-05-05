@@ -1,4 +1,5 @@
 /**
+ * Debug drawer (opened from header). No floating FAB — use `#header-debug-toggle` in app shell.
  * @returns {string}
  */
 export function renderDebugOverlay() {
@@ -15,11 +16,6 @@ export function renderDebugOverlay() {
       <button type="button" id="debug-reset-app" class="mb-1.5 text-xs px-2 py-1 border border-red-200 text-red-800 bg-red-50 rounded-sm hover:bg-red-100 w-full">Reset app</button>
       <p class="text-[0.65rem] text-sia-text-muted leading-snug">Logs out, clears all local storage for this site, and reloads.</p>
     </div>
-    <div class="mb-3 pt-2 border-t border-sia-border space-y-2">
-      <p id="debug-launcher-url-note" class="hidden text-xs text-sia-text-muted">URL <code class="text-[0.65rem]">?debug=true</code>: floating button always shown.</p>
-      <button type="button" id="debug-hide-launcher" class="hidden text-xs px-2 py-1 border border-sia-border rounded-sm hover:bg-sia-muted w-full">Hide floating debug button</button>
-      <button type="button" id="debug-show-launcher" class="hidden text-xs px-2 py-1 border border-sia-border rounded-sm hover:bg-sia-muted w-full">Show floating debug button</button>
-    </div>
     <div class="space-y-4 text-xs">
       <div>
         <h3 class="font-medium text-sia-text mb-1">SDK user</h3>
@@ -30,10 +26,9 @@ export function renderDebugOverlay() {
         <pre id="debug-rest-profile" class="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-48"></pre>
       </div>
       <div>
-        <h3 class="font-medium text-sia-text mb-1">Event log</h3>
+        <h3 class="font-medium text-sia-text mb-1">Custom events (live)</h3>
         <ul id="debug-event-log" class="space-y-1 max-h-64 overflow-y-auto"></ul>
       </div>
     </div>
-  </div>
-  <button type="button" id="debug-drawer-trigger" class="hidden fixed bottom-4 left-4 z-[99] px-3 py-2 text-xs font-medium bg-sia-navy text-white rounded-sm shadow">Debug</button>`;
+  </div>`;
 }

@@ -25,7 +25,6 @@ export function isValidBookingSearch(obj) {
  */
 export function buildBookingPayload(raw) {
   const {
-    origin_code,
     destination_code,
     trip_type,
     depart_date,

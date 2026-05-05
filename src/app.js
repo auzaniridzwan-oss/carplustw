@@ -1,655 +1,537 @@
-import { renderShellFooter, renderShellHeader } from './components/shell.js';
-import { renderHomeBooking } from './components/homeBooking.js';
-import { createHighlightsSection, renderHighlightsSection } from './components/highlightsSection.js';
-import { renderSearchResults, bindFareOptionSelection } from './components/searchResults.js';
-import { renderRegistrationModal, isValidEmail, validateSgPhone } from './components/registrationModal.js';
-import { renderLoginModal } from './components/loginModal.js';
-import { renderDebugOverlay } from './components/debugOverlay.js';
-import { FLIGHT_DATA } from './data/flights.js';
-import { buildBookingPayload, isValidBookingSearch } from './logic/bookingPayload.js';
-import { getPersistedExternalId, persistAuthSession } from './logic/userSession.js';
-import { fetchSqDemoFlights } from './services/serpapiFlightsClient.js';
+import { renderRentalSearch } from './components/rentalSearch.js';
+import { renderCarList } from './components/carList.js';
+import { renderAddonsStep } from './components/addonsStep.js';
+import { renderConfirmationStep } from './components/confirmationStep.js';
+import { renderPaymentStep } from './components/paymentStep.js';
+import { renderThankYouStep } from './components/thankYouStep.js';
+import { TAIWAN_LOCATIONS } from './data/taiwanLocations.js';
+import { CARS } from './data/cars.js';
+import { RENTAL_ADDONS } from './data/addons.js';
 import { StorageManager } from './managers/StorageManager.js';
 import { AppLogger } from './managers/AppLogger.js';
-import { BrazeManager, EVENT_LOGGED } from './managers/BrazeManager.js';
-import { BrazeRestManager } from './managers/BrazeRestManager.js';
-import { Modal } from 'flowbite';
+import { BrazeManager } from './managers/BrazeManager.js';
 
+const STEPS = {
+  SEARCH: 'SEARCH',
+  CARS: 'CARS',
+  ADDONS: 'ADDONS',
+  CONFIRMATION: 'CONFIRMATION',
+  PAYMENT: 'PAYMENT',
+  THANK_YOU: 'THANK_YOU',
+};
 
-const VIEWS = { HOME: 'HOME', SEARCH_RESULTS: 'SEARCH_RESULTS' };
+const STORAGE_KEYS = {
+  STEP: 'rental_step',
+  SEARCH: 'rental_search',
+  CAR: 'rental_selected_car',
+  ADDONS: 'rental_addons',
+  PRICING: 'rental_pricing',
+  ORDER: 'rental_order',
+};
 
-/** @type {'HOME'|'SEARCH_RESULTS'} */
-let currentView = VIEWS.HOME;
-
-/** @type {object | null} */
-let pendingSearchPayload = null;
-
-/** @type {(() => void) | null} */
-let unsubBrazeEvents = null;
-
-/** @type {ReturnType<typeof createHighlightsSection> | null} */
-let highlightsController = null;
+/** @type {keyof typeof STEPS} */
+let currentStep = STEPS.SEARCH;
+let isPaymentProcessing = false;
 
 /**
- * @returns {boolean}
+ * @returns {{pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string,rentalDays:number}|null}
  */
-function isDebugUrl() {
-  return new URLSearchParams(location.search).get('debug') === 'true';
+function getSearchState() {
+  return /** @type {ReturnType<typeof getSearchState>} */ (StorageManager.get(STORAGE_KEYS.SEARCH, null));
 }
 
 /**
- * @returns {boolean}
+ * @returns {{id:string,brand:string,model:string,type:string,seats:number,mileage:number,dailyPriceTwd:number,imageUrl:string}|null}
  */
-function hasLoggedInUserId() {
-  return !!getPersistedExternalId();
+function getSelectedCarState() {
+  return /** @type {ReturnType<typeof getSelectedCarState>} */ (StorageManager.get(STORAGE_KEYS.CAR, null));
 }
 
 /**
- * @returns {boolean}
+ * @returns {string[]}
  */
-function isDebugOverlayEligible() {
-  return isDebugUrl() || hasLoggedInUserId();
+function getSelectedAddonIds() {
+  return /** @type {string[]} */ (StorageManager.get(STORAGE_KEYS.ADDONS, []));
 }
 
 /**
- * @returns {boolean}
+ * @returns {{carTotal:number,addonsTotal:number,total:number}}
  */
-function isDebugLauncherHiddenPersisted() {
-  return !!StorageManager.get('debug_launcher_hidden', false);
+function getPricingState() {
+  return /** @type {{carTotal:number,addonsTotal:number,total:number}} */ (
+    StorageManager.get(STORAGE_KEYS.PRICING, { carTotal: 0, addonsTotal: 0, total: 0 })
+  );
 }
 
 /**
- * Syncs floating Debug button, header recovery link, and drawer launcher controls.
+ * @returns {{bookingRef:string,total:number,pickupLocation:string,returnLocation:string,pickupDate:string,returnDate:string,carLabel:string}|null}
+ */
+function getOrderState() {
+  return /** @type {ReturnType<typeof getOrderState>} */ (StorageManager.get(STORAGE_KEYS.ORDER, null));
+}
+
+/**
+ * @param {string} dateText
+ * @param {string} timeText
+ * @returns {Date|null}
+ */
+function toDateTime(dateText, timeText) {
+  if (!dateText || !timeText) return null;
+  const parsed = new Date(`${dateText}T${timeText}:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+/**
+ * @param {Date} start
+ * @param {Date} end
+ * @returns {number}
+ */
+function getRentalDays(start, end) {
+  const ms = end.getTime() - start.getTime();
+  const days = Math.ceil(ms / (1000 * 60 * 60 * 24));
+  return Math.max(1, days);
+}
+
+/**
+ * @param {{pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string}} formData
+ * @returns {{ok:boolean,error?:string,payload?:{pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string,rentalDays:number}}}
+ */
+function validateSearchForm(formData) {
+  if (
+    !formData.pickupLocation ||
+    !formData.returnLocation ||
+    !formData.pickupDate ||
+    !formData.pickupTime ||
+    !formData.returnDate ||
+    !formData.returnTime
+  ) {
+    return { ok: false, error: 'Please complete all required fields.' };
+  }
+  const pickupAt = toDateTime(formData.pickupDate, formData.pickupTime);
+  const returnAt = toDateTime(formData.returnDate, formData.returnTime);
+  if (!pickupAt || !returnAt) {
+    return { ok: false, error: 'Invalid date or time format.' };
+  }
+  if (returnAt <= pickupAt) {
+    return { ok: false, error: 'Return date and time must be after pickup date and time.' };
+  }
+  return {
+    ok: true,
+    payload: {
+      ...formData,
+      rentalDays: getRentalDays(pickupAt, returnAt),
+    },
+  };
+}
+
+/**
+ * @returns {{product_id:string,product_name:string,variant_id:string,image_url:string,product_url:string,quantity:number,price:number,metadata:Record<string,unknown>}[]}
+ */
+function buildCartProducts() {
+  const car = getSelectedCarState();
+  const addonIds = getSelectedAddonIds();
+  const addons = RENTAL_ADDONS.filter((addon) => addonIds.includes(addon.id));
+  /** @type {ReturnType<typeof buildCartProducts>} */
+  const products = [];
+  if (car) {
+    products.push({
+      product_id: car.id,
+      product_name: `${car.brand} ${car.model}`,
+      variant_id: car.type.toLowerCase().replace(/\s+/g, '_'),
+      image_url: car.imageUrl,
+      product_url: `${location.origin}${location.pathname}#car-${car.id}`,
+      quantity: 1,
+      price: car.dailyPriceTwd,
+      metadata: {
+        seats: car.seats,
+        mileage_km_per_l: car.mileage,
+        category: 'car_rental',
+      },
+    });
+  }
+  addons.forEach((addon) => {
+    products.push({
+      product_id: addon.id,
+      product_name: addon.name,
+      variant_id: 'addon_daily',
+      image_url: '',
+      product_url: `${location.origin}${location.pathname}#addon-${addon.id}`,
+      quantity: 1,
+      price: addon.dailyPriceTwd,
+      metadata: {
+        category: 'rental_addon',
+      },
+    });
+  });
+  return products;
+}
+
+/**
  * @returns {void}
  */
-function applyDebugLauncherVisibility() {
-  const trigger = document.getElementById('debug-drawer-trigger');
-  const recovery = document.getElementById('debug-launcher-recovery');
-  const urlDebug = isDebugUrl();
-  const eligible = isDebugOverlayEligible();
-  const hidden = isDebugLauncherHiddenPersisted();
-  const showFab = eligible && (urlDebug || !hidden);
-
-  trigger?.classList.toggle('hidden', !showFab);
-  recovery?.classList.toggle('hidden', !(eligible && hidden && !urlDebug));
-
-  const note = document.getElementById('debug-launcher-url-note');
-  const btnHide = document.getElementById('debug-hide-launcher');
-  const btnShow = document.getElementById('debug-show-launcher');
-  note?.classList.toggle('hidden', !(urlDebug && eligible));
-  const showHideBtn = eligible && !urlDebug && !hidden;
-  btnHide?.classList.toggle('hidden', !showHideBtn);
-  btnShow?.classList.toggle('hidden', !(eligible && !urlDebug && hidden));
+function recalculatePricing() {
+  const search = getSearchState();
+  const car = getSelectedCarState();
+  const rentalDays = search?.rentalDays ?? 0;
+  const selectedAddons = RENTAL_ADDONS.filter((addon) => getSelectedAddonIds().includes(addon.id));
+  const carTotal = car ? car.dailyPriceTwd * rentalDays : 0;
+  const addonsTotal = selectedAddons.reduce((sum, addon) => sum + addon.dailyPriceTwd * rentalDays, 0);
+  const total = carTotal + addonsTotal;
+  const pricing = { carTotal, addonsTotal, total };
+  StorageManager.set(STORAGE_KEYS.PRICING, pricing);
+  AppLogger.info('[UI]', 'Pricing recalculated', pricing);
 }
 
 /**
- * @returns {'HOME'|'SEARCH_RESULTS'}
+ * @returns {void}
  */
-function parseHash() {
-  let h = location.hash.replace(/^#/, '');
-  if (!h) h = '/home';
-  if (!h.startsWith('/')) h = `/${h}`;
-  if (h.startsWith('/search-results')) return VIEWS.SEARCH_RESULTS;
-  return VIEWS.HOME;
+function logCartUpdatedEvent() {
+  const search = getSearchState();
+  const pricing = getPricingState();
+  if (!search) return;
+  BrazeManager.logCustomEvent('ecommerce.cart_updated', {
+    cart_id: `rental-cart-${search.pickupDate}-${search.returnDate}`,
+    total_value: pricing.total,
+    subtotal_value: pricing.total,
+    tax: 0,
+    shipping: 0,
+    currency: 'TWD',
+    products: buildCartProducts(),
+    source: 'web',
+    metadata: {
+      pickup_location: search.pickupLocation,
+      return_location: search.returnLocation,
+      rental_days: search.rentalDays,
+    },
+  });
 }
 
 /**
- * @param {'HOME'|'SEARCH_RESULTS'} view
+ * @param {keyof typeof STEPS} nextStep
+ * @returns {void}
  */
-function setHashForView(view) {
-  const next = view === VIEWS.SEARCH_RESULTS ? '#/search-results' : '#/home';
-  if (location.hash === next) return;
-  location.hash = next;
-}
-
-/**
- * @param {'HOME'|'SEARCH_RESULTS'} view
- * @param {{ replaceHash?: boolean }} [opts]
- */
-function navigate(view, { replaceHash = true } = {}) {
-  currentView = view;
-  if (replaceHash) setHashForView(view);
-  window.scrollTo(0, 0);
-  BrazeManager.logCustomEvent('page_view', { page: currentView });
+function moveToStep(nextStep) {
+  currentStep = nextStep;
+  StorageManager.set(STORAGE_KEYS.STEP, nextStep);
   render();
-  bindAfterRender();
+  bindStepActions();
 }
 
+/**
+ * @returns {void}
+ */
 function render() {
   const app = document.getElementById('app');
   if (!app) return;
+  const search = getSearchState() ?? {
+    pickupLocation: '',
+    returnLocation: '',
+    pickupDate: '',
+    pickupTime: '',
+    returnDate: '',
+    returnTime: '',
+    rentalDays: 0,
+  };
+  const selectedCar = getSelectedCarState();
+  const selectedAddonIds = getSelectedAddonIds();
+  const pricing = getPricingState();
+  const selectedAddons = RENTAL_ADDONS.filter((addon) => selectedAddonIds.includes(addon.id));
+  const order = getOrderState();
 
-  const showDebugOverlay = isDebugOverlayEligible();
+  let stepContent = '';
+  if (currentStep === STEPS.SEARCH) {
+    stepContent = renderRentalSearch(TAIWAN_LOCATIONS, search);
+  } else if (currentStep === STEPS.CARS) {
+    stepContent = renderCarList(CARS, selectedCar?.id ?? null, search);
+  } else if (currentStep === STEPS.ADDONS) {
+    stepContent = renderAddonsStep(RENTAL_ADDONS, selectedAddonIds);
+  } else if (currentStep === STEPS.CONFIRMATION) {
+    stepContent = renderConfirmationStep({
+      search,
+      car: selectedCar,
+      addons: selectedAddons,
+      pricing,
+    });
+  } else if (currentStep === STEPS.PAYMENT) {
+    stepContent = renderPaymentStep(isPaymentProcessing);
+  } else if (currentStep === STEPS.THANK_YOU && order) {
+    stepContent = renderThankYouStep(order);
+  }
 
   app.innerHTML = `
-    ${renderShellHeader({ activeView: currentView, loggedIn: hasLoggedInUserId() })}
-    <main id="main-view" class="flex flex-col min-h-[40vh]"></main>
-    ${renderShellFooter()}
-    ${renderRegistrationModal()}
-    ${renderLoginModal()}
-    ${showDebugOverlay ? renderDebugOverlay() : ''}
+    <div class="rental-app">
+      <header class="page-header">
+        <h1>Taiwan Car Rental</h1>
+        <p>Book your ride with transparent NTD pricing.</p>
+      </header>
+      <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
+      ${stepContent}
+    </div>
   `;
-
-  const main = document.getElementById('main-view');
-  if (!main) return;
-
-  if (currentView === VIEWS.HOME) {
-    const saved = StorageManager.get('booking_search', null);
-    const persisted =
-      saved && isValidBookingSearch(saved)
-        ? {
-          defaultDestination: saved.destination_code,
-          defaultDepart: saved.depart_date,
-          defaultReturn: saved.return_date,
-        }
-        : {};
-    main.innerHTML = `${renderHomeBooking(persisted)}${renderHighlightsSection()}`;
-  } else {
-    const search = StorageManager.get('booking_search', null);
-    if (!isValidBookingSearch(search)) {
-      AppLogger.warn('[UI]', 'Invalid booking_search on results route — redirecting home');
-      currentView = VIEWS.HOME;
-      history.replaceState(null, '', `${location.pathname}${location.search}#/home`);
-      main.innerHTML = `${renderHomeBooking({})}${renderHighlightsSection()}`;
-      return;
-    }
-    const cached = StorageManager.get('booking_last_results', null);
-    const flights = Array.isArray(cached) ? cached : [];
-    const summary = `${search.origin_code} → ${search.destination_code} · ${search.depart_date} – ${search.return_date}`;
-    const dateRangeLine = `${search.depart_date} – ${search.return_date}`;
-    main.innerHTML = renderSearchResults({
-      flights,
-      searchSummary: summary,
-      routeCodes: { origin_code: search.origin_code, destination_code: search.destination_code },
-      dateRangeLine,
-    });
-  }
-}
-
-/**
- * Flowbite 2.x: use `new Modal(...)` (default instance options override by id after re-renders). There is no `Modal.getInstance(element)`.
- * @returns {InstanceType<typeof Modal> | null}
- */
-function getRegistrationModalInstance() {
-  const el = document.getElementById('registration-modal');
-  if (!el) return null;
-  return new Modal(el, { backdrop: 'dynamic', closable: true });
-}
-
-function openRegistrationModal() {
-  getRegistrationModalInstance()?.show();
-}
-
-function closeRegistrationModal() {
-  getRegistrationModalInstance()?.hide();
-}
-
-/**
- * @returns {InstanceType<typeof Modal> | null}
- */
-function getLoginModalInstance() {
-  const el = document.getElementById('login-modal');
-  if (!el) return null;
-  return new Modal(el, { backdrop: 'dynamic', closable: true });
-}
-
-function openLoginModal() {
-  getLoginModalInstance()?.show();
-}
-
-function closeLoginModal() {
-  getLoginModalInstance()?.hide();
-}
-
-/**
- * @param {object} payload
- */
-async function runSearchAfterAuth(payload) {
-  StorageManager.set('booking_search', payload);
-  BrazeManager.setCustomAttribute('sia_last_search_origin', payload.origin_code);
-  BrazeManager.setCustomAttribute('sia_last_search_destination', payload.destination_code);
-  BrazeManager.setCustomAttribute('sia_last_search_depart', payload.depart_date);
-  BrazeManager.setCustomAttribute('sia_last_search_return', payload.return_date);
-  BrazeManager.logCustomEvent('sia_searched_flight', {
-    origin_code: payload.origin_code,
-    destination_code: payload.destination_code,
-    depart_date: payload.depart_date,
-    return_date: payload.return_date,
-    trip_type: payload.trip_type,
-  });
-  BrazeManager.requestImmediateDataFlush();
-
-  document.getElementById('search-loading')?.classList.remove('hidden');
-
-  const t0 = Date.now();
-  const live = await fetchSqDemoFlights(payload);
-  let list =
-    live.ok && live.rows.length > 0 ? live.rows : FLIGHT_DATA[payload.destination_code] ?? [];
-  const elapsed = Date.now() - t0;
-  const minMs = 400;
-  if (elapsed < minMs) {
-    await new Promise((r) => setTimeout(r, minMs - elapsed));
-  }
-
-  StorageManager.set('booking_last_results', list);
-
-  document.getElementById('search-loading')?.classList.add('hidden');
-
-  navigate(VIEWS.SEARCH_RESULTS);
 }
 
 /**
  * @returns {void}
  */
-function bindAfterRender() {
-  if (highlightsController) {
-    highlightsController.dispose();
-    highlightsController = null;
-  }
-
-  const main = document.getElementById('main-view');
-  if (main) {
-    bindFareOptionSelection(main, currentView === VIEWS.SEARCH_RESULTS);
-  }
-
-  document.getElementById('sia-logo-btn')?.addEventListener('click', () => navigate(VIEWS.HOME));
-
-  document.querySelectorAll('[data-route]').forEach((a) => {
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      const r = /** @type {HTMLElement} */ (a).dataset.route;
-      if (r === 'SEARCH_RESULTS') {
-        const search = StorageManager.get('booking_search', null);
-        if (!isValidBookingSearch(search)) {
-          AppLogger.info('[UI]', 'No saved search; opening home');
-          location.hash = '#/home';
-          return;
-        }
-      }
-      location.hash = r === 'SEARCH_RESULTS' ? '#/search-results' : '#/home';
-    });
-  });
-
-  document.querySelectorAll('[data-nav="utility"], [data-nav="decor"]').forEach((el) => {
-    el.addEventListener('click', (e) => e.preventDefault());
-  });
-
-  document.getElementById('header-login-link')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    openLoginModal();
-  });
-
-  document.getElementById('debug-launcher-recovery')?.addEventListener('click', () => {
-    StorageManager.set('debug_launcher_hidden', false);
-    applyDebugLauncherVisibility();
-  });
-
-  if (currentView === VIEWS.HOME) {
-    const tabBook = document.getElementById('tab-book');
-    const tabManage = document.getElementById('tab-manage');
-    const tabCheck = document.getElementById('tab-checkin');
-    const tabStatus = document.getElementById('tab-status');
-    const panelBook = document.getElementById('tab-panel-book');
-    const panelPh = document.getElementById('tab-panel-placeholder');
-
-    /** @param {'book'|'oth'} mode */
-    const setTab = (mode) => {
-      const pairs = [
-        [tabBook, mode === 'book'],
-        [tabManage, false],
-        [tabCheck, false],
-        [tabStatus, false],
-      ];
-      pairs.forEach(([btn, on]) => {
-        if (!btn) return;
-        btn.classList.toggle('bg-sia-navy', on);
-        btn.classList.toggle('text-white', on);
-        btn.classList.toggle('text-sia-text-muted', !on);
-        btn.setAttribute('aria-selected', on ? 'true' : 'false');
-      });
-      panelBook?.classList.toggle('hidden', mode !== 'book');
-      panelPh?.classList.toggle('hidden', mode === 'book');
-    };
-
-    tabBook?.addEventListener('click', () => setTab('book'));
-    tabManage?.addEventListener('click', () => setTab('oth'));
-    tabCheck?.addEventListener('click', () => setTab('oth'));
-    tabStatus?.addEventListener('click', () => setTab('oth'));
-
-    const highlightsMount = document.getElementById('highlights-cards');
-    if (highlightsMount) {
-      highlightsController = createHighlightsSection(highlightsMount);
-    }
-
-    document.getElementById('search-flights-btn')?.addEventListener('click', () => {
-      const tripEl = document.querySelector('input[name="trip_type"]:checked');
-      const trip_type = tripEl ? /** @type {HTMLInputElement} */ (tripEl).value : 'book_flights';
-      const destination_code = /** @type {HTMLSelectElement} */ (document.getElementById('destination')).value;
-      const depart_date = /** @type {HTMLInputElement} */ (document.getElementById('depart_date')).value;
-      const return_date = /** @type {HTMLInputElement} */ (document.getElementById('return_date')).value;
-
-      const built = buildBookingPayload({
-        destination_code,
-        trip_type,
-        depart_date,
-        return_date,
-      });
-      if (!built.ok || !built.payload) {
-        AppLogger.warn('[UI]', built.error || 'Validation failed');
-        alert(built.error || 'Please check your trip details.');
-        return;
-      }
-
-      const userId = getPersistedExternalId();
-      if (!userId) {
-        pendingSearchPayload = built.payload;
-        AppLogger.info('[AUTH]', 'Search gated — registration required');
-        openRegistrationModal();
-        return;
-      }
-
-      runSearchAfterAuth(built.payload);
-    });
-
-    document.getElementById('hero-cta')?.addEventListener('click', () => {
-      document.getElementById('search-flights-btn')?.scrollIntoView({ behavior: 'smooth' });
-    });
-  }
-
-  bindRegistrationForm();
-  bindLoginForm();
-  bindDebugOverlay();
-}
-
-function bindRegistrationForm() {
-  const form = document.getElementById('registration-form');
+function bindSearchStep() {
+  const form = document.getElementById('rental-search-form');
   if (!form) return;
-
-  const showErr = (id, msg) => {
-    const p = document.getElementById(id);
-    if (!p) return;
-    if (msg) {
-      p.textContent = msg;
-      p.classList.remove('hidden');
-    } else {
-      p.textContent = '';
-      p.classList.add('hidden');
-    }
-  };
-
-  document.getElementById('registration-cancel')?.addEventListener('click', () => {
-    pendingSearchPayload = null;
-    closeRegistrationModal();
-  });
-  document.getElementById('registration-modal-close')?.addEventListener('click', () => {
-    pendingSearchPayload = null;
-    closeRegistrationModal();
-  });
-
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    showErr('reg-first-err');
-    showErr('reg-last-err');
-    showErr('reg-email-err');
-    showErr('reg-phone-err');
-    showErr('reg-form-err');
-
-    const firstName = /** @type {HTMLInputElement} */ (document.getElementById('reg-first')).value.trim();
-    const lastName = /** @type {HTMLInputElement} */ (document.getElementById('reg-last')).value.trim();
-    const email = /** @type {HTMLInputElement} */ (document.getElementById('reg-email')).value.trim();
-    const phoneRaw = /** @type {HTMLInputElement} */ (document.getElementById('reg-phone')).value;
-
-    let bad = false;
-    if (!firstName) {
-      showErr('reg-first-err', 'Required');
-      bad = true;
-    }
-    if (!lastName) {
-      showErr('reg-last-err', 'Required');
-      bad = true;
-    }
-    if (!email || !isValidEmail(email)) {
-      showErr('reg-email-err', 'Valid email required');
-      bad = true;
-    }
-    const phoneCheck = validateSgPhone(phoneRaw);
-    if (!phoneCheck.ok) {
-      showErr('reg-phone-err', phoneCheck.error || 'Invalid phone');
-      bad = true;
-    }
-    if (bad) return;
-
-    const result = BrazeManager.completeRegistration({
-      firstName,
-      lastName,
-      email,
-      phone: phoneCheck.e164,
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const payload = validateSearchForm({
+      pickupLocation: /** @type {HTMLSelectElement} */ (document.getElementById('pickup-location')).value,
+      returnLocation: /** @type {HTMLSelectElement} */ (document.getElementById('return-location')).value,
+      pickupDate: /** @type {HTMLInputElement} */ (document.getElementById('pickup-date')).value,
+      pickupTime: /** @type {HTMLInputElement} */ (document.getElementById('pickup-time')).value,
+      returnDate: /** @type {HTMLInputElement} */ (document.getElementById('return-date')).value,
+      returnTime: /** @type {HTMLInputElement} */ (document.getElementById('return-time')).value,
     });
-
-    if (!result.ok) {
-      showErr('reg-form-err', result.error || 'Registration failed');
+    const err = document.getElementById('search-form-error');
+    if (!payload.ok || !payload.payload) {
+      if (err) {
+        err.textContent = payload.error ?? 'Invalid search';
+        err.classList.remove('hidden');
+      }
+      AppLogger.warn('[UI]', 'Search validation failed', payload.error);
       return;
     }
-
-    persistAuthSession(result.externalId, 'registration');
-    AppLogger.info('[AUTH]', 'Registration complete');
-    closeRegistrationModal();
-
-    const resume = pendingSearchPayload;
-    pendingSearchPayload = null;
-    if (resume) {
-      runSearchAfterAuth(resume);
-    } else {
-      render();
-      bindAfterRender();
-    }
+    StorageManager.set(STORAGE_KEYS.SEARCH, payload.payload);
+    AppLogger.info('[UI]', 'Rental search set', payload.payload);
+    moveToStep(STEPS.CARS);
   });
 }
 
-function bindLoginForm() {
-  const form = document.getElementById('login-form');
-  if (!form) return;
+/**
+ * @returns {void}
+ */
+function bindCarStep() {
+  document.querySelectorAll('.car-select-btn').forEach((button) => {
+    button.addEventListener('click', () => {
+      const id = /** @type {HTMLElement} */ (button).dataset.carId;
+      const car = CARS.find((item) => item.id === id);
+      if (!car) return;
+      StorageManager.set(STORAGE_KEYS.CAR, car);
+      recalculatePricing();
+      BrazeManager.logCustomEvent('ecommerce.product_viewed', {
+        product_id: car.id,
+        product_name: `${car.brand} ${car.model}`,
+        variant_id: car.type.toLowerCase().replace(/\s+/g, '_'),
+        image_url: car.imageUrl,
+        product_url: `${location.origin}${location.pathname}#car-${car.id}`,
+        price: car.dailyPriceTwd,
+        currency: 'TWD',
+        source: 'web',
+        metadata: {
+          seats: car.seats,
+          mileage_km_per_l: car.mileage,
+        },
+      });
+      logCartUpdatedEvent();
+      moveToStep(STEPS.CARS);
+    });
+  });
 
-  const showErr = (id, msg) => {
-    const p = document.getElementById(id);
-    if (!p) return;
-    if (msg) {
-      p.textContent = msg;
-      p.classList.remove('hidden');
-    } else {
-      p.textContent = '';
-      p.classList.add('hidden');
-    }
+  document.getElementById('back-to-search')?.addEventListener('click', () => moveToStep(STEPS.SEARCH));
+  document.getElementById('continue-to-addons')?.addEventListener('click', () => {
+    if (!getSelectedCarState()) return;
+    moveToStep(STEPS.ADDONS);
+  });
+}
+
+/**
+ * @returns {void}
+ */
+function bindAddonsStep() {
+  document.querySelectorAll('[data-addon-id]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const ids = Array.from(document.querySelectorAll('[data-addon-id]:checked')).map(
+        (node) => /** @type {HTMLElement} */ (node).dataset.addonId,
+      );
+      StorageManager.set(STORAGE_KEYS.ADDONS, ids.filter(Boolean));
+      recalculatePricing();
+      logCartUpdatedEvent();
+      moveToStep(STEPS.ADDONS);
+    });
+  });
+
+  document.getElementById('back-to-cars')?.addEventListener('click', () => moveToStep(STEPS.CARS));
+  document.getElementById('continue-to-confirmation')?.addEventListener('click', () => moveToStep(STEPS.CONFIRMATION));
+}
+
+/**
+ * @returns {void}
+ */
+function bindConfirmationStep() {
+  document.getElementById('back-to-addons')?.addEventListener('click', () => moveToStep(STEPS.ADDONS));
+  document.getElementById('continue-to-payment')?.addEventListener('click', () => {
+    const search = getSearchState();
+    const pricing = getPricingState();
+    BrazeManager.logCustomEvent('ecommerce.checkout_started', {
+      checkout_id: `checkout-${Date.now()}`,
+      cart_id: `rental-cart-${search?.pickupDate}-${search?.returnDate}`,
+      total_value: pricing.total,
+      subtotal_value: pricing.total,
+      tax: 0,
+      shipping: 0,
+      currency: 'TWD',
+      products: buildCartProducts(),
+      source: 'web',
+      metadata: {
+        checkout_url: `${location.origin}${location.pathname}#payment`,
+      },
+    });
+    moveToStep(STEPS.PAYMENT);
+  });
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isValidCardNumber(value) {
+  return /^\d{13,19}$/.test(value.replace(/\s+/g, ''));
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isValidExpiry(value) {
+  return /^(0[1-9]|1[0-2])\/\d{2}$/.test(value);
+}
+
+/**
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isValidCvv(value) {
+  return /^\d{3,4}$/.test(value);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function processPayment() {
+  isPaymentProcessing = true;
+  render();
+  bindStepActions();
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  const search = getSearchState();
+  const car = getSelectedCarState();
+  const pricing = getPricingState();
+  const orderId = `CR-${Date.now()}`;
+  const order = {
+    bookingRef: orderId,
+    total: pricing.total,
+    pickupLocation: search?.pickupLocation ?? '',
+    returnLocation: search?.returnLocation ?? '',
+    pickupDate: `${search?.pickupDate ?? ''} ${search?.pickupTime ?? ''}`.trim(),
+    returnDate: `${search?.returnDate ?? ''} ${search?.returnTime ?? ''}`.trim(),
+    carLabel: car ? `${car.brand} ${car.model}` : '',
   };
-
-  document.getElementById('login-cancel')?.addEventListener('click', () => {
-    closeLoginModal();
+  StorageManager.set(STORAGE_KEYS.ORDER, order);
+  BrazeManager.logCustomEvent('ecommerce.order_placed', {
+    order_id: orderId,
+    cart_id: `rental-cart-${search?.pickupDate}-${search?.returnDate}`,
+    total_value: pricing.total,
+    subtotal_value: pricing.total,
+    tax: 0,
+    shipping: 0,
+    currency: 'TWD',
+    products: buildCartProducts(),
+    source: 'web',
+    metadata: {
+      order_status_url: `${location.origin}${location.pathname}#thank-you`,
+    },
   });
-  document.getElementById('login-modal-close')?.addEventListener('click', () => {
-    closeLoginModal();
+  AppLogger.info('[SYSTEM]', 'Payment success', { orderId, total: pricing.total });
+  isPaymentProcessing = false;
+  moveToStep(STEPS.THANK_YOU);
+}
+
+/**
+ * @returns {void}
+ */
+function bindPaymentStep() {
+  document.getElementById('back-to-confirmation')?.addEventListener('click', () => {
+    if (isPaymentProcessing) return;
+    moveToStep(STEPS.CONFIRMATION);
   });
 
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    showErr('login-email-err');
-    showErr('login-form-err');
+  const form = document.getElementById('payment-form');
+  if (!form) return;
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (isPaymentProcessing) return;
+    const cardholderName = /** @type {HTMLInputElement} */ (document.getElementById('cardholder-name')).value.trim();
+    const cardNumber = /** @type {HTMLInputElement} */ (document.getElementById('card-number')).value.trim();
+    const cardExpiry = /** @type {HTMLInputElement} */ (document.getElementById('card-expiry')).value.trim();
+    const cardCvv = /** @type {HTMLInputElement} */ (document.getElementById('card-cvv')).value.trim();
+    const errorEl = document.getElementById('payment-error');
 
-    const emailRaw = /** @type {HTMLInputElement} */ (document.getElementById('login-email')).value.trim();
-    if (!emailRaw || !isValidEmail(emailRaw)) {
-      showErr('login-email-err', 'Valid email required');
+    if (!cardholderName || !isValidCardNumber(cardNumber) || !isValidExpiry(cardExpiry) || !isValidCvv(cardCvv)) {
+      if (errorEl) {
+        errorEl.textContent = 'Please enter valid payment details.';
+        errorEl.classList.remove('hidden');
+      }
+      AppLogger.warn('[UI]', 'Payment validation failed');
       return;
     }
-
-    const normalizedEmail = emailRaw.toLowerCase();
-    persistAuthSession(normalizedEmail, 'login');
-    BrazeManager.login(normalizedEmail);
-    AppLogger.info('[AUTH]', 'Login complete');
-    closeLoginModal();
-    render();
-    bindAfterRender();
+    void processPayment();
   });
 }
 
-function bindDebugOverlay() {
-  if (!isDebugOverlayEligible()) {
-    if (unsubBrazeEvents) {
-      unsubBrazeEvents();
-      unsubBrazeEvents = null;
-    }
-    return;
-  }
-
-  const drawer = document.getElementById('debug-drawer');
-  const trigger = document.getElementById('debug-drawer-trigger');
-  trigger?.addEventListener('click', () => {
-    drawer?.classList.remove('-translate-x-full');
-    void refreshDebugPanels();
+/**
+ * @returns {void}
+ */
+function bindThankYouStep() {
+  document.getElementById('start-new-booking')?.addEventListener('click', () => {
+    StorageManager.remove(STORAGE_KEYS.SEARCH);
+    StorageManager.remove(STORAGE_KEYS.CAR);
+    StorageManager.remove(STORAGE_KEYS.ADDONS);
+    StorageManager.remove(STORAGE_KEYS.PRICING);
+    StorageManager.remove(STORAGE_KEYS.ORDER);
+    StorageManager.set(STORAGE_KEYS.STEP, STEPS.SEARCH);
+    AppLogger.info('[UI]', 'Booking state reset');
+    moveToStep(STEPS.SEARCH);
   });
-  document.getElementById('debug-drawer-close')?.addEventListener('click', () => {
-    drawer?.classList.add('-translate-x-full');
-  });
-
-  document.getElementById('debug-hide-launcher')?.addEventListener('click', () => {
-    if (isDebugUrl()) return;
-    StorageManager.set('debug_launcher_hidden', true);
-    applyDebugLauncherVisibility();
-    drawer?.classList.add('-translate-x-full');
-  });
-
-  document.getElementById('debug-show-launcher')?.addEventListener('click', () => {
-    if (isDebugUrl()) return;
-    StorageManager.set('debug_launcher_hidden', false);
-    applyDebugLauncherVisibility();
-  });
-
-  if (unsubBrazeEvents) {
-    unsubBrazeEvents();
-    unsubBrazeEvents = null;
-  }
-
-  unsubBrazeEvents = BrazeManager.subscribe(EVENT_LOGGED, (payload) => {
-    const ul = document.getElementById('debug-event-log');
-    if (!ul) return;
-    const li = document.createElement('li');
-    li.className = 'event-log-flash border-b border-sia-border/40 pb-1 break-all';
-    li.textContent = `${new Date().toISOString()} — ${payload.name} ${JSON.stringify(payload.props || {})}`;
-    ul.prepend(li);
-  });
-
-  document.getElementById('debug-refresh-profile')?.addEventListener('click', () => refreshDebugPanels());
-
-  document.getElementById('debug-reset-app')?.addEventListener('click', () => {
-    if (
-      !window.confirm(
-        'Reset the app? This logs you out, clears all local storage for this site, and reloads the page.',
-      )
-    ) {
-      return;
-    }
-    BrazeManager.wipeLocalSdkData();
-    try {
-      localStorage.clear();
-    } catch (e) {
-      AppLogger.warn('[STORAGE]', 'localStorage.clear failed', e);
-    }
-    location.reload();
-  });
-
-  applyDebugLauncherVisibility();
 }
 
-async function refreshDebugPanels() {
-  const sdkPre = document.getElementById('debug-sdk-user');
-  const restPre = document.getElementById('debug-rest-profile');
-  if (sdkPre) {
-    sdkPre.textContent = JSON.stringify(BrazeManager.getUserData(), null, 2);
-  }
-  const uid = getPersistedExternalId();
-  if (restPre) {
-    if (!uid) {
-      restPre.textContent = 'No persisted external id in storage';
-      return;
-    }
-    try {
-      const data = await BrazeRestManager.fetchUserProfile(uid);
-      restPre.textContent = JSON.stringify(data, null, 2);
-    } catch (e) {
-      restPre.textContent = e instanceof Error ? e.message : String(e);
-    }
-  }
+/**
+ * @returns {void}
+ */
+function bindStepActions() {
+  if (currentStep === STEPS.SEARCH) bindSearchStep();
+  if (currentStep === STEPS.CARS) bindCarStep();
+  if (currentStep === STEPS.ADDONS) bindAddonsStep();
+  if (currentStep === STEPS.CONFIRMATION) bindConfirmationStep();
+  if (currentStep === STEPS.PAYMENT) bindPaymentStep();
+  if (currentStep === STEPS.THANK_YOU) bindThankYouStep();
 }
 
-function ensureSearchLoadingOverlay() {
-  if (document.getElementById('search-loading')) return;
-  const el = document.createElement('div');
-  el.id = 'search-loading';
-  el.className =
-    'hidden fixed inset-0 z-[70] bg-white/70 flex items-center justify-center pointer-events-auto';
-  el.innerHTML = `
-    <div class="flex flex-col items-center gap-5 px-4">
-      <div class="relative flex h-24 w-24 items-center justify-center">
-        <div
-          class="absolute inset-0 rounded-full border-4 border-sia-border border-t-sia-gold border-r-transparent animate-spin"
-          aria-hidden="true"
-        ></div>
-        <i class="fa-solid fa-plane text-3xl text-sia-navy" aria-hidden="true"></i>
-      </div>
-      <p class="text-sia-navy font-medium text-lg text-center">Searching flights…</p>
-    </div>`;
-  document.body.appendChild(el);
+/**
+ * @returns {void}
+ */
+function hydratePersistedStep() {
+  const step = /** @type {keyof typeof STEPS} */ (StorageManager.get(STORAGE_KEYS.STEP, STEPS.SEARCH));
+  currentStep = Object.values(STEPS).includes(step) ? step : STEPS.SEARCH;
+  if (currentStep !== STEPS.SEARCH && !getSearchState()) currentStep = STEPS.SEARCH;
+  if ([STEPS.ADDONS, STEPS.CONFIRMATION, STEPS.PAYMENT, STEPS.THANK_YOU].includes(currentStep) && !getSelectedCarState()) {
+    currentStep = STEPS.CARS;
+  }
 }
 
 /**
  * @returns {void}
  */
 export function bootstrapApp() {
-  AppLogger.info('[SYSTEM]', `App start v${__APP_VERSION__}`);
-
-  ensureSearchLoadingOverlay();
-
+  AppLogger.info('[SYSTEM]', `Car rental app start v${__APP_VERSION__}`);
   const apiKey = import.meta.env.VITE_BRAZE_SDK_KEY || '';
   const baseUrl = import.meta.env.VITE_BRAZE_SDK_URL || '';
   BrazeManager.initialize(apiKey, baseUrl);
-  BrazeManager.syncUserFromStorage();
-
-  BrazeManager.subscribe('HERO_CONTENT', (patch) => {
-    if (patch?.title) {
-      const t = document.getElementById('hero-title');
-      if (t) t.textContent = patch.title;
-    }
-  });
-
-  window.addEventListener('hashchange', () => {
-    const next = parseHash();
-    if (next === VIEWS.SEARCH_RESULTS) {
-      const search = StorageManager.get('booking_search', null);
-      if (!isValidBookingSearch(search)) {
-        AppLogger.warn('[UI]', 'Results route requires valid booking_search');
-        if (location.hash !== '#/home') {
-          location.hash = '#/home';
-        }
-        return;
-      }
-    }
-    if (next === currentView) return;
-    navigate(next, { replaceHash: false });
-  });
-
-  if (!location.hash || location.hash === '#') {
-    history.replaceState(null, '', `${location.pathname}${location.search}#/home`);
-  }
-
-  currentView = parseHash();
-  if (currentView === VIEWS.SEARCH_RESULTS) {
-    const search = StorageManager.get('booking_search', null);
-    if (!isValidBookingSearch(search)) {
-      currentView = VIEWS.HOME;
-      history.replaceState(null, '', `${location.pathname}${location.search}#/home`);
-    }
-  }
-
-  navigate(currentView, { replaceHash: false });
+  hydratePersistedStep();
+  recalculatePricing();
+  render();
+  bindStepActions();
 }
-
-
-StorageManager.set('debug_mode', true);

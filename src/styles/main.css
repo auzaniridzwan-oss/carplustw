@@ -36,3 +36,185 @@
     background-color: rgb(221 176 103 / 35%);
   }
 }
+
+.hidden {
+  display: none;
+}
+
+.rental-app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+  color: #1f2937;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #0f2350;
+}
+
+.page-header p {
+  margin-top: 0.5rem;
+  color: #6b7280;
+}
+
+.stepper {
+  margin: 1rem 0;
+  color: #475569;
+  font-weight: 600;
+}
+
+.panel {
+  border: 1px solid #d1d5db;
+  border-radius: 0.8rem;
+  padding: 1.2rem;
+  background: #fff;
+}
+
+.panel h2 {
+  margin-top: 0;
+  color: #0f2350;
+}
+
+.muted {
+  color: #6b7280;
+}
+
+.grid-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.grid-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.grid-form input,
+.grid-form select {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  font-weight: 400;
+}
+
+.actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.7rem;
+  justify-content: flex-end;
+}
+
+.primary-btn,
+.secondary-btn {
+  border: 0;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.primary-btn {
+  background: #0f2350;
+  color: #fff;
+}
+
+.primary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.car-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.car-card {
+  border: 1px solid #d1d5db;
+  border-radius: 0.8rem;
+  overflow: hidden;
+  background: #fff;
+}
+
+.car-card.selected {
+  border-color: #0f2350;
+  box-shadow: 0 0 0 2px rgb(15 35 80 / 15%);
+}
+
+.car-card img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+.car-content {
+  padding: 0.8rem;
+}
+
+.car-content h3 {
+  margin: 0 0 0.35rem;
+}
+
+.car-content ul {
+  margin: 0.6rem 0;
+  padding-left: 1.1rem;
+}
+
+.addon-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.addon-item {
+  border: 1px solid #d1d5db;
+  border-radius: 0.6rem;
+  padding: 0.7rem;
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.addon-item span {
+  display: flex;
+  flex-direction: column;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.pricing-block {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 0.8rem;
+}
+
+.total {
+  font-size: 1.1rem;
+  color: #0f2350;
+}
+
+.error {
+  color: #b91c1c;
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .grid-form,
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+}

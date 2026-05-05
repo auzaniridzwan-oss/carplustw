@@ -42,9 +42,11 @@ let isDebugDrawerOpen = false;
 let loginSuccessMessage = '';
 let loginSuccessMessageTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 let debugEventIndicatorTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
+let carouselAutoAdvanceTimer = /** @type {ReturnType<typeof setInterval> | null} */ (null);
 
 /** Max entries retained for the debug drawer custom event list. */
 const CUSTOM_EVENT_LOG_MAX = 80;
+const CAROUSEL_AUTO_ADVANCE_MS = 3000;
 
 /**
  * @typedef {{ pickupLocation:string,returnLocation:string,pickupDate:string,pickupTime:string,returnDate:string,returnTime:string,rentalDays:number }} RentalSearchPayload
@@ -600,6 +602,38 @@ function moveToStep(nextStep) {
 }
 
 /**
+ * Advances the hero carousel by one slide and re-renders the SEARCH step.
+ * @returns {void}
+ */
+function advanceCarousel() {
+  if (currentStep !== STEPS.SEARCH) return;
+  carouselIndex = (carouselIndex + 1) % CAROUSEL_SLIDES.length;
+  render();
+  bindStepActions();
+}
+
+/**
+ * Stops the SEARCH hero carousel auto-advance timer.
+ * @returns {void}
+ */
+function stopCarouselAutoAdvance() {
+  if (!carouselAutoAdvanceTimer) return;
+  clearInterval(carouselAutoAdvanceTimer);
+  carouselAutoAdvanceTimer = null;
+}
+
+/**
+ * Starts the SEARCH hero carousel auto-advance timer.
+ * @returns {void}
+ */
+function startCarouselAutoAdvance() {
+  if (carouselAutoAdvanceTimer || currentStep !== STEPS.SEARCH) return;
+  carouselAutoAdvanceTimer = setInterval(() => {
+    advanceCarousel();
+  }, CAROUSEL_AUTO_ADVANCE_MS);
+}
+
+/**
  * @returns {void}
  */
 function render() {
@@ -714,6 +748,12 @@ function render() {
  * @returns {void}
  */
 function bindGlobalUiActions() {
+  if (currentStep === STEPS.SEARCH) {
+    startCarouselAutoAdvance();
+  } else {
+    stopCarouselAutoAdvance();
+  }
+
   document.querySelectorAll('[data-header-link]').forEach((link) => {
     link.addEventListener('click', (event) => {
       event.preventDefault();
@@ -793,9 +833,7 @@ function bindGlobalUiActions() {
       bindStepActions();
     });
     document.getElementById('carousel-next')?.addEventListener('click', () => {
-      carouselIndex = (carouselIndex + 1) % CAROUSEL_SLIDES.length;
-      render();
-      bindStepActions();
+      advanceCarousel();
     });
     document.querySelectorAll('[data-carousel-index]').forEach((dot) => {
       dot.addEventListener('click', () => {

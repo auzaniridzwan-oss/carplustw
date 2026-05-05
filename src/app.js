@@ -12,6 +12,7 @@ import { RENTAL_ADDONS } from './data/addons.js';
 import { StorageManager } from './managers/StorageManager.js';
 import { AppLogger } from './managers/AppLogger.js';
 import { BrazeManager, EVENT_LOGGED } from './managers/BrazeManager.js';
+import { BrazeRestManager } from './managers/BrazeRestManager.js';
 import { getPersistedExternalId, persistAuthSession } from './logic/userSession.js';
 
 const STEPS = {
@@ -36,6 +37,9 @@ const STORAGE_KEYS = {
 let currentStep = STEPS.SEARCH;
 let isPaymentProcessing = false;
 let carouselIndex = 0;
+let isDebugDrawerOpen = false;
+let loginSuccessMessage = '';
+let loginSuccessMessageTimer = /** @type {ReturnType<typeof setTimeout> | null} */ (null);
 
 /** Max entries retained for the debug drawer custom event list. */
 const CUSTOM_EVENT_LOG_MAX = 80;
@@ -51,6 +55,104 @@ let customEventLogBuffer = [];
  * @type {RentalSearchPayload | null}
  */
 let pendingRentalSearchAfterLogin = null;
+
+/**
+ * Sets a transient login success notice shown in the app shell.
+ * @param {string} message
+ * @returns {void}
+ */
+function setLoginSuccessNotice(message) {
+  loginSuccessMessage = message;
+  if (loginSuccessMessageTimer) {
+    clearTimeout(loginSuccessMessageTimer);
+  }
+  loginSuccessMessageTimer = setTimeout(() => {
+    loginSuccessMessage = '';
+    render();
+    bindStepActions();
+    loginSuccessMessageTimer = null;
+  }, 4000);
+}
+
+/**
+ * Returns the current debug drawer element and toggle button.
+ * @returns {{ drawer: HTMLElement | null, toggle: HTMLButtonElement | null }}
+ */
+function getDebugDrawerControls() {
+  return {
+    drawer: document.getElementById('debug-drawer'),
+    toggle: /** @type {HTMLButtonElement | null} */ (document.getElementById('header-debug-toggle')),
+  };
+}
+
+/**
+ * Applies the debug drawer open/closed state to current DOM.
+ * @param {boolean} open
+ * @returns {void}
+ */
+function setDebugDrawerOpen(open) {
+  isDebugDrawerOpen = open;
+  const { drawer, toggle } = getDebugDrawerControls();
+  if (drawer) {
+    if (open) {
+      drawer.classList.remove('-translate-x-full');
+    } else {
+      drawer.classList.add('-translate-x-full');
+    }
+  }
+  toggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+}
+
+/**
+ * Writes JSON data into a debug `<pre>` target safely.
+ * @param {'debug-sdk-user'|'debug-rest-profile'} targetId
+ * @param {unknown} data
+ * @returns {void}
+ */
+function writeDebugJson(targetId, data) {
+  const el = document.getElementById(targetId);
+  if (!el) return;
+  try {
+    el.textContent = JSON.stringify(data, null, 2);
+  } catch {
+    el.textContent = '[unserializable data]';
+  }
+}
+
+/**
+ * Refreshes SDK and REST profile details shown in debug overlay.
+ * @param {{ force?: boolean }} [options]
+ * @returns {Promise<void>}
+ */
+async function refreshDebugProfile(options = {}) {
+  const externalId = getPersistedExternalId();
+  writeDebugJson('debug-sdk-user', {
+    external_id: externalId || null,
+    ...BrazeManager.getUserData(),
+  });
+  if (!externalId) {
+    writeDebugJson('debug-rest-profile', {
+      info: 'No logged-in user found. Log in to view REST profile.',
+    });
+    return;
+  }
+  const restEl = document.getElementById('debug-rest-profile');
+  if (restEl) {
+    restEl.textContent = 'Loading...';
+  }
+  if (options.force && BrazeRestManager._cache?.id === externalId) {
+    BrazeRestManager._cache = null;
+  }
+  try {
+    const data = await BrazeRestManager.fetchUserProfile(externalId);
+    writeDebugJson('debug-rest-profile', data);
+  } catch (error) {
+    writeDebugJson('debug-rest-profile', {
+      external_id: externalId,
+      error: String(error),
+    });
+  }
+}
 
 const CAROUSEL_SLIDES = [
   {
@@ -279,6 +381,7 @@ function completeLoginSuccess(email) {
   persistAuthSession(normalized, 'login');
   BrazeManager.requestImmediateDataFlush();
   AppLogger.info('[AUTH]', 'User logged in', { externalIdPreview: `${normalized.slice(0, 3)}…` });
+  setLoginSuccessNotice(`Login successful. Welcome, ${normalized}.`);
   closeLoginModal();
   document.getElementById('login-email-err')?.classList.add('hidden');
   document.getElementById('login-form-err')?.classList.add('hidden');
@@ -472,6 +575,13 @@ function render() {
         <h1>Taiwan Car Rental</h1>
         <p>Book your ride with transparent NTD pricing.</p>
       </header>
+      ${
+        loginSuccessMessage
+          ? `<div class="mb-4 rounded-sm border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800" role="status" aria-live="polite">
+              ${escapeHtmlForDebug(loginSuccessMessage)}
+            </div>`
+          : ''
+      }
       <div class="stepper">Step: ${currentStep.replace('_', ' ')}</div>
       ${stepContent}
       ${renderLoginModal()}
@@ -499,29 +609,23 @@ function bindGlobalUiActions() {
     });
   });
 
-  const drawer = document.getElementById('debug-drawer');
-  const debugToggle = /** @type {HTMLButtonElement | null} */ (document.getElementById('header-debug-toggle'));
-
-  /**
-   * @param {boolean} open
-   */
-  const setDebugDrawerOpen = (open) => {
-    if (!drawer) return;
-    if (open) {
-      drawer.classList.remove('-translate-x-full');
-    } else {
-      drawer.classList.add('-translate-x-full');
-    }
-    debugToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
-  };
+  const { toggle: debugToggle } = getDebugDrawerControls();
+  setDebugDrawerOpen(isDebugDrawerOpen);
 
   debugToggle?.addEventListener('click', () => {
-    const closed = drawer?.classList.contains('-translate-x-full') ?? true;
-    setDebugDrawerOpen(closed);
+    const nextOpen = !isDebugDrawerOpen;
+    setDebugDrawerOpen(nextOpen);
+    if (nextOpen) {
+      void refreshDebugProfile();
+    }
   });
 
   document.getElementById('debug-drawer-close')?.addEventListener('click', () => {
     setDebugDrawerOpen(false);
+  });
+
+  document.getElementById('debug-refresh-profile')?.addEventListener('click', () => {
+    void refreshDebugProfile({ force: true });
   });
 
   document.getElementById('login-modal-close')?.addEventListener('click', () => {
@@ -550,6 +654,13 @@ function bindGlobalUiActions() {
   });
 
   syncDebugEventLogUi();
+  writeDebugJson('debug-sdk-user', {
+    external_id: getPersistedExternalId(),
+    ...BrazeManager.getUserData(),
+  });
+  if (isDebugDrawerOpen) {
+    void refreshDebugProfile();
+  }
 
   if (currentStep === STEPS.SEARCH) {
     document.getElementById('carousel-prev')?.addEventListener('click', () => {

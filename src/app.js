@@ -4,7 +4,7 @@ import { renderAddonsStep } from './components/addonsStep.js';
 import { renderConfirmationStep } from './components/confirmationStep.js';
 import { renderPaymentStep } from './components/paymentStep.js';
 import { renderThankYouStep } from './components/thankYouStep.js';
-import { renderDebugOverlay } from './components/debugOverlay.js';
+import { renderDebugOverlay, formatDebugJson } from './components/debugOverlay.js';
 import { renderLoginModal } from './components/loginModal.js';
 import { TAIWAN_LOCATIONS } from './data/taiwanLocations.js';
 import { CARS } from './data/cars.js';
@@ -112,11 +112,7 @@ function setDebugDrawerOpen(open) {
 function writeDebugJson(targetId, data) {
   const el = document.getElementById(targetId);
   if (!el) return;
-  try {
-    el.textContent = JSON.stringify(data, null, 2);
-  } catch {
-    el.textContent = '[unserializable data]';
-  }
+  el.textContent = formatDebugJson(data);
 }
 
 /**
@@ -334,14 +330,8 @@ function syncDebugEventLogUi() {
     const e = customEventLogBuffer[i];
     const li = document.createElement('li');
     li.className = 'text-[0.65rem] border-b border-gray-100 pb-1 mb-1';
-    let propsStr = '';
-    try {
-      propsStr = e.props != null ? JSON.stringify(e.props) : '';
-    } catch {
-      propsStr = '[unserializable]';
-    }
-    const truncated = propsStr.length > 500 ? `${propsStr.slice(0, 500)}…` : propsStr;
-    li.innerHTML = `<span class="font-medium text-sia-navy">${escapeHtmlForDebug(e.name)}</span> <span class="text-sia-text-muted">${new Date(e.at).toISOString()}</span><pre class="mt-0.5 whitespace-pre-wrap break-all">${escapeHtmlForDebug(truncated)}</pre>`;
+    const propsStr = e.props != null ? formatDebugJson(e.props) : '';
+    li.innerHTML = `<span class="font-medium text-sia-navy">${escapeHtmlForDebug(e.name)}</span> <span class="text-sia-text-muted">${new Date(e.at).toISOString()}</span><pre class="mt-0.5 whitespace-pre-wrap break-words font-mono bg-gray-50 p-1 rounded max-h-24 overflow-y-auto">${escapeHtmlForDebug(propsStr)}</pre>`;
     ul.appendChild(li);
   }
 }

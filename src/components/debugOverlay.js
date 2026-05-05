@@ -1,4 +1,17 @@
 /**
+ * Pretty-prints a value as indented JSON for the debug drawer.
+ * @param {unknown} data - Value to serialize.
+ * @returns {string} Indented JSON or a fallback message when serialization fails.
+ */
+export function formatDebugJson(data) {
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return '[unserializable data]';
+  }
+}
+
+/**
  * Debug drawer (opened from header). No floating FAB — use `#header-debug-toggle` in app shell.
  * @returns {string}
  */
@@ -19,11 +32,11 @@ export function renderDebugOverlay() {
     <div class="space-y-4 text-xs flex-1 min-h-0 flex flex-col">
       <div>
         <h3 class="font-medium text-sia-text mb-1">Logged-in SDK user</h3>
-        <pre id="debug-sdk-user" class="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-32"></pre>
+        <pre id="debug-sdk-user" class="bg-gray-100 p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-32"></pre>
       </div>
       <div>
         <h3 class="font-medium text-sia-text mb-1">Logged-in REST profile</h3>
-        <pre id="debug-rest-profile" class="bg-gray-100 p-2 rounded text-xs overflow-auto max-h-48"></pre>
+        <pre id="debug-rest-profile" class="bg-gray-100 p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-48"></pre>
       </div>
       <div class="flex-1 min-h-0 flex flex-col">
         <h3 class="font-medium text-sia-text mb-1">Custom events (live)</h3>

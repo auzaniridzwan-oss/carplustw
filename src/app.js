@@ -217,6 +217,35 @@ async function retryDebugRestProfileHydrationAfterLogin(externalId) {
   }
 }
 
+/**
+ * Performs a full debug reset back to initial app state.
+ * Clears app storage, wipes local Braze SDK identity/device data, and rebuilds UI from defaults.
+ * @returns {void}
+ */
+function resetAppFromDebug() {
+  if (loginSuccessMessageTimer) {
+    clearTimeout(loginSuccessMessageTimer);
+    loginSuccessMessageTimer = null;
+  }
+
+  StorageManager.clearSession();
+  BrazeManager.wipeLocalSdkData();
+  BrazeRestManager._cache = null;
+
+  currentStep = STEPS.SEARCH;
+  isPaymentProcessing = false;
+  carouselIndex = 0;
+  isDebugDrawerOpen = false;
+  loginSuccessMessage = '';
+  latestDebugRestProfileState = 'idle';
+  pendingRentalSearchAfterLogin = null;
+  customEventLogBuffer = [];
+
+  AppLogger.info('[SYSTEM]', 'Debug reset executed: app state cleared');
+  render();
+  bindStepActions();
+}
+
 const CAROUSEL_SLIDES = [
   {
     id: 'city-drive',
@@ -684,6 +713,10 @@ function bindGlobalUiActions() {
 
   document.getElementById('debug-refresh-profile')?.addEventListener('click', () => {
     void refreshDebugProfile({ force: true });
+  });
+
+  document.getElementById('debug-reset-app')?.addEventListener('click', () => {
+    resetAppFromDebug();
   });
 
   document.getElementById('login-modal-close')?.addEventListener('click', () => {

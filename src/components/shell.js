@@ -1,7 +1,7 @@
 import siaLogoSmallUrl from '../images/sia-logo-small.png';
 
 /**
- * Dual-level SIA-style header and marketing footer.
+ * Marketing shell: dual-level header and footer.
  * @param {{ activeView: string, loggedIn?: boolean }} opts
  * @returns {string} HTML
  */
@@ -58,10 +58,10 @@ export function renderShellFooter() {
   return `
   <footer class="bg-sia-navy text-sia-border mt-auto">
     <div class="max-w-7xl mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8">
-      ${col('Customer Service', ['About Us', 'Rescue Assistance', 'Lost and Found', 'Contact Us'])} 
-      ${col('About Us', ['Service Locations', 'Talent Recruitment', 'Privacy Policy'])} 
-      ${col('Our Services', ['Daily Rental', 'Shared Cars', 'Car Subscription'])} 
-      ${col('News Center', ['Press Release', 'News Reports', 'Annual Reports', 'ESG'])} 
+      ${col('Help &amp; support', ['Roadside assistance', 'FAQs', 'Contact us', 'Damage &amp; claims'])}
+      ${col('Rent &amp; locations', ['Branch finder', 'Airport pickup &amp; return', 'One-way rental', 'Service areas'])}
+      ${col('Products &amp; add-ons', ['Daily rental', 'Weekly &amp; monthly rental', 'Insurance &amp; protection', 'Extras &amp; add-ons'])}
+      ${col('Company', ['About us', 'Careers', 'Press', 'Sustainability'])}
     </div>
     <div class="border-t border-white/10">
       <div class="max-w-7xl mx-auto px-4 py-6 flex flex-wrap items-center justify-between gap-4 text-xs">
@@ -75,7 +75,7 @@ export function renderShellFooter() {
           <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram" aria-hidden="true"></i></a>
           <a href="#" aria-label="LinkedIn"><i class="fa-brands fa-linkedin-in" aria-hidden="true"></i></a>
         </div>
-        <p class="text-sia-border w-full md:w-auto text-center md:text-right">Awards &amp; accolades (decorative)</p>
+        <p class="text-sia-border w-full md:w-auto text-center md:text-right">Trusted fleet &amp; Taiwan coverage (demo)</p>
       </div>
     </div>
   </footer>`;

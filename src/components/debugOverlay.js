@@ -30,14 +30,20 @@ export function renderDebugOverlay() {
       <p class="text-[0.65rem] text-sia-text-muted leading-snug">Logs out, clears all local storage for this site, and reloads.</p>
     </div>
     <div class="space-y-4 text-xs flex-1 min-h-0 flex flex-col">
-      <div>
-        <h3 class="font-medium text-sia-text mb-1">Logged-in SDK user</h3>
-        <pre id="debug-sdk-user" class="bg-gray-100 p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-32"></pre>
-      </div>
-      <div>
-        <h3 class="font-medium text-sia-text mb-1">Logged-in REST profile</h3>
-        <pre id="debug-rest-profile" class="bg-gray-100 p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-48"></pre>
-      </div>
+      <details class="group border border-sia-border rounded-sm overflow-hidden">
+        <summary class="cursor-pointer select-none font-medium text-sia-text px-2 py-1.5 flex items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+          <span>Logged-in SDK user</span>
+          <i class="fa-solid fa-chevron-down text-[0.65rem] shrink-0 transition-transform group-open:rotate-180" aria-hidden="true"></i>
+        </summary>
+        <pre id="debug-sdk-user" class="bg-gray-100 p-2 mx-2 mb-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-32"></pre>
+      </details>
+      <details class="group border border-sia-border rounded-sm overflow-hidden">
+        <summary class="cursor-pointer select-none font-medium text-sia-text px-2 py-1.5 flex items-center justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+          <span>Logged-in REST profile</span>
+          <i class="fa-solid fa-chevron-down text-[0.65rem] shrink-0 transition-transform group-open:rotate-180" aria-hidden="true"></i>
+        </summary>
+        <pre id="debug-rest-profile" class="bg-gray-100 p-2 mx-2 mb-2 rounded text-xs font-mono whitespace-pre-wrap overflow-auto max-h-48"></pre>
+      </details>
       <div class="flex-1 min-h-0 flex flex-col">
         <h3 class="font-medium text-sia-text mb-1 flex items-center gap-1.5">
           <span>Custom events (live)</span>

@@ -602,14 +602,37 @@ function moveToStep(nextStep) {
 }
 
 /**
- * Advances the hero carousel by one slide and re-renders the SEARCH step.
+ * Updates hero carousel background, headline, and dots without replacing the SEARCH step markup.
+ * Avoids full {@link render} so the rental booking form keeps in-progress field values.
+ * @returns {void}
+ */
+function syncHeroCarouselDom() {
+  const section = document.querySelector('.hero-carousel');
+  if (!section) return;
+  const slide = CAROUSEL_SLIDES[carouselIndex];
+  section.style.backgroundImage = `linear-gradient(90deg, rgba(0, 38, 99, 0.65), rgba(0, 38, 99, 0.25)), url('${slide.imageUrl}')`;
+  const content = section.querySelector('.hero-carousel-content');
+  const titleEl = content?.querySelector('h2');
+  if (titleEl) titleEl.textContent = slide.title;
+  const subtitleEl = content?.querySelector('h2 + p');
+  if (subtitleEl) subtitleEl.textContent = slide.subtitle;
+  const dotsEl = section.querySelector('.carousel-dots');
+  if (dotsEl) {
+    dotsEl.innerHTML = CAROUSEL_SLIDES.map(
+      (item, idx) =>
+        `<button type="button" class="carousel-dot ${idx === carouselIndex ? 'active' : ''}" data-carousel-index="${idx}" aria-label="View ${escapeHtmlForDebug(item.title)}"></button>`,
+    ).join('');
+  }
+}
+
+/**
+ * Advances the hero carousel by one slide and syncs carousel DOM only (booking form unchanged).
  * @returns {void}
  */
 function advanceCarousel() {
   if (currentStep !== STEPS.SEARCH) return;
   carouselIndex = (carouselIndex + 1) % CAROUSEL_SLIDES.length;
-  render();
-  bindStepActions();
+  syncHeroCarouselDom();
 }
 
 /**
@@ -828,20 +851,19 @@ function bindGlobalUiActions() {
   if (currentStep === STEPS.SEARCH) {
     document.getElementById('carousel-prev')?.addEventListener('click', () => {
       carouselIndex = (carouselIndex - 1 + CAROUSEL_SLIDES.length) % CAROUSEL_SLIDES.length;
-      render();
-      bindStepActions();
+      syncHeroCarouselDom();
     });
     document.getElementById('carousel-next')?.addEventListener('click', () => {
       advanceCarousel();
     });
-    document.querySelectorAll('[data-carousel-index]').forEach((dot) => {
-      dot.addEventListener('click', () => {
-        const nextIndex = Number(/** @type {HTMLElement} */(dot).dataset.carouselIndex);
-        if (Number.isNaN(nextIndex)) return;
-        carouselIndex = nextIndex;
-        render();
-        bindStepActions();
-      });
+    document.querySelector('.hero-carousel')?.addEventListener('click', (event) => {
+      const target =
+        event.target instanceof Element ? /** @type {HTMLElement | null} */ (event.target.closest('[data-carousel-index]')) : null;
+      if (!target) return;
+      const nextIndex = Number(target.dataset.carouselIndex);
+      if (Number.isNaN(nextIndex)) return;
+      carouselIndex = nextIndex;
+      syncHeroCarouselDom();
     });
   }
 }

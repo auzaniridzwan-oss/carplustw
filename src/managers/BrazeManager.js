@@ -113,7 +113,7 @@ class BrazeManagerClass {
     try {
       const ok = braze.initialize(apiKey, {
         baseUrl,
-        enableLogging: false,
+        enableLogging: Boolean(import.meta.env.DEV),
         noCookies: false,
       });
       this._initialized = ok;
@@ -122,9 +122,16 @@ class BrazeManagerClass {
 
         this.configIAM();
         AppLogger.info('[SDK]', 'Braze Web SDK initialized', { baseUrl });
+      } else {
+        AppLogger.warn(
+          '[SDK]',
+          'Braze initialize returned false — verify Web SDK key and sdk.<cluster>.braze.com match your Braze app; check user opt-out or crawler blocking',
+          { baseUrl },
+        );
       }
       return ok;
     } catch (e) {
+      this._initialized = false;
       AppLogger.warn('[SDK]', 'Braze initialize failed', e);
       return false;
     }
@@ -266,14 +273,25 @@ class BrazeManagerClass {
   }
 
   /**
-   * After SDK init: restore Braze user via `login` (changeUser + openSession) when storage has an external id.
+   * After SDK init: restore Braze user via `login` (changeUser + openSession) when storage has an external id;
+   * otherwise opens an anonymous session so the SDK can sync with Braze (sessions / tracing).
    * Reads from `user_id` or `user_session.external_id` (see getPersistedExternalId).
    * @returns {void}
    */
   syncUserFromStorage() {
     if (!this._initialized) return;
     const id = getPersistedExternalId();
-    if (id) this.login(id);
+    if (id) {
+      this.login(id);
+      return;
+    }
+    try {
+      braze.openSession();
+      this.logSdkSuccess('openSession', { anonymous: true }, '[AUTH]');
+      AppLogger.info('[AUTH]', 'Braze anonymous session opened');
+    } catch (e) {
+      AppLogger.warn('[AUTH]', 'Braze anonymous openSession failed', e);
+    }
   }
 
   /**

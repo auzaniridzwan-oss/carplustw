@@ -42,14 +42,25 @@ Import the GitHub repo into the [auzani-ridzwans-projects](https://vercel.com/au
 
 ## Braze: events and attributes (demo)
 
-- Custom event: `page_view` for high-level screen transitions.
-- Custom event: `car_search` when users submit rental search criteria (non-PII fields only).
-- Custom event: `booking_step_completed` as users progress through car select, add-ons, payment, and confirmation.
-- Custom event: `Registration - Completed` for identity capture in the gated flow.
-- Custom event: `App_Error` with short message from `AppLogger.error`.
-- User attributes: standard profile fields (email, first name, last name, phone if provided), plus demo custom attributes where applicable.
+These names match what the app sends today (search the dashboard for exact strings):
+
+- Custom event: `ecommerce.cart_updated` — rental search / cart context updates in the funnel.
+- Custom event: `ecommerce.product_viewed` — car detail views.
+- Custom event: `ecommerce.checkout_started` — moving into checkout-style steps.
+- Custom event: `ecommerce.order_placed` — completed booking confirmation.
+- Custom event: `Registration - Completed` — successful registration (from `BrazeManager.completeRegistration`).
+- Custom event: `App_Error` — short message from `AppLogger.error` (via `main.js` hook).
+- User attributes: standard profile fields on registration (email, first name, last name, phone if provided), plus demo custom attributes from registration.
 
 REST profile enrichment for debugging uses **`/api/braze/user-data?id=<external_id>`** (server-side export proxy)—see [Braze REST](https://www.braze.com/docs/api/home/).
+
+### Troubleshooting (missing events / empty User Event Tracing)
+
+1. **`VITE_*` at build time:** Vite inlines `VITE_BRAZE_SDK_KEY` and `VITE_BRAZE_SDK_URL` when you run `npm run build`. Set them in Vercel for **Production** (and **Preview** if you test previews), then **redeploy**. Empty values skip initialization and log a `[SDK]` warning in the console.
+2. **Cluster match:** `VITE_BRAZE_SDK_URL` must be the SDK endpoint host for the same Braze app as your Web SDK key (e.g. `sdk.iad-03.braze.com` from **Manage Settings**).
+3. **Network:** In DevTools → Network, confirm requests to `sdk.*.braze.com`. Ad blockers or proxies can block them.
+4. **SDK logs (local):** With `npm run dev`, Braze SDK verbose logging is enabled (`enableLogging` in `BrazeManager`). Watch the browser console for init/session messages.
+5. **Fire events:** Custom events above fire when users move through the booking funnel or complete registration—not on every page load alone.
 
 ## Product chrome
 

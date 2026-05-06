@@ -1,5 +1,5 @@
 /**
- * Flowbite-compatible login modal (email as Braze external id).
+ * Flowbite-compatible login modal (email or Braze External ID for changeUser).
  * @returns {string}
  */
 export function renderLoginModal() {
@@ -14,11 +14,11 @@ export function renderLoginModal() {
           </button>
         </div>
         <form id="login-form" class="p-4 md:p-6 space-y-4" novalidate>
-          <p class="text-sm text-sia-text-muted">Demo: sign in with your email as Braze user id.</p>
+          <p class="text-sm text-sia-text-muted">Enter the email or Braze External ID for this user (same value you use in the Braze dashboard).</p>
           <div>
-            <label for="login-email" class="block text-sm font-medium mb-1">Email <span class="text-red-600">*</span></label>
-            <input id="login-email" name="email" type="email" required class="w-full border border-sia-border rounded-sm p-2.5 text-sm" autocomplete="username" />
-            <p id="login-email-err" class="hidden text-xs text-red-600 mt-1"></p>
+            <label for="login-external-id" class="block text-sm font-medium mb-1">Email or External ID <span class="text-red-600">*</span></label>
+            <input id="login-external-id" name="external_id" type="text" required maxlength="255" class="w-full border border-sia-border rounded-sm p-2.5 text-sm" autocomplete="username" />
+            <p id="login-external-id-err" class="hidden text-xs text-red-600 mt-1"></p>
           </div>
           <p id="login-form-err" class="hidden text-sm text-red-600"></p>
           <div class="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-2">

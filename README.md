@@ -37,6 +37,7 @@ Import the GitHub repo into the [auzani-ridzwans-projects](https://vercel.com/au
 - **`StorageManager`** — All persisted keys use the `ar_app_` prefix; the API takes the **suffix only** (e.g. `booking_search`, `user_id`).
 - **`AppLogger`** — Ring buffer, console output, `getLogs()` for the last 50 entries; **no PII** in log lines. **ERROR** also fires Braze **`App_Error`** (message truncated).
 - **`BrazeManager`** — Singleton-style wrapper: `initialize`, `login` / `completeRegistration`, `logCustomEvent`, `subscribe` / `notify` (e.g. **`EVENT_LOGGED`** for the debug overlay).
+- **Login** — Header login accepts **email or Braze External ID** (must match the user’s external id in your Braze workspace); email-shaped values are lowercased like registration.
 - **Hash SPA** — Main flow is rendered through app-level steps from rental search to thank-you confirmation.
 - **Booking state** — Validated payload and step context are stored through `StorageManager` so refreshes and step transitions are resilient in demo mode.
 

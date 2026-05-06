@@ -63,6 +63,35 @@ let latestDebugRestProfileState = /** @type {'idle'|'loading'|'no_logged_in_user
 
 const REST_PROFILE_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
+/** Max characters for login Braze External ID (aligned with modal input maxlength). */
+const LOGIN_EXTERNAL_ID_MAX_LEN = 255;
+
+/**
+ * True when trimmed input looks like an email local@domain.tld for normalization purposes.
+ * @param {string} trimmed - Already trimmed string.
+ * @returns {boolean}
+ */
+function isEmailShapedLogin(trimmed) {
+  if (!trimmed.includes('@')) return false;
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local.length || !domain.includes('.')) return false;
+  return domain.split('.').every((seg) => seg.length > 0);
+}
+
+/**
+ * Trims login input; lowercases email-shaped values (consistent with registration); preserves casing for other external IDs.
+ * @param {string} raw - Raw field value.
+ * @returns {string | null} Normalized id, or null if empty after trim.
+ */
+function normalizeLoginExternalId(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (isEmailShapedLogin(trimmed)) return trimmed.toLowerCase();
+  return trimmed;
+}
+
 /**
  * Sets a transient login success notice shown in the app shell.
  * @param {string} message
@@ -482,19 +511,19 @@ function closeLoginModal() {
 
 /**
  * Completes login: Braze user, persistence, then continues booking if a search was pending.
- * @param {string} email
+ * @param {string} externalId - Normalized Braze external id (from {@link normalizeLoginExternalId}).
  * @returns {void}
  */
-function completeLoginSuccess(email) {
-  const normalized = email.trim().toLowerCase();
-  BrazeManager.login(normalized);
-  persistAuthSession(normalized, 'login');
+function completeLoginSuccess(externalId) {
+  BrazeManager.login(externalId);
+  persistAuthSession(externalId, 'login');
   BrazeManager.requestImmediateDataFlush();
-  AppLogger.info('[AUTH]', 'User logged in', { externalIdPreview: `${normalized.slice(0, 3)}…` });
-  setLoginSuccessNotice(`Login successful. Welcome, ${normalized}.`);
-  void retryDebugRestProfileHydrationAfterLogin(normalized);
+  const preview = BrazeManager.maskExternalId(externalId);
+  AppLogger.info('[AUTH]', 'User logged in', { externalIdPreview: preview });
+  setLoginSuccessNotice(`Login successful. User: ${preview}`);
+  void retryDebugRestProfileHydrationAfterLogin(externalId);
   closeLoginModal();
-  document.getElementById('login-email-err')?.classList.add('hidden');
+  document.getElementById('login-external-id-err')?.classList.add('hidden');
   document.getElementById('login-form-err')?.classList.add('hidden');
   if (pendingRentalSearchAfterLogin) {
     StorageManager.set(STORAGE_KEYS.SEARCH, pendingRentalSearchAfterLogin);
@@ -819,20 +848,36 @@ function bindGlobalUiActions() {
 
   document.getElementById('login-form')?.addEventListener('submit', (event) => {
     event.preventDefault();
-    const emailInput = /** @type {HTMLInputElement | null} */ (document.getElementById('login-email'));
-    const emailErr = document.getElementById('login-email-err');
+    const idInput = /** @type {HTMLInputElement | null} */ (document.getElementById('login-external-id'));
+    const idErr = document.getElementById('login-external-id-err');
     const formErr = document.getElementById('login-form-err');
-    emailErr?.classList.add('hidden');
+    idErr?.classList.add('hidden');
     formErr?.classList.add('hidden');
-    const email = emailInput?.value.trim() ?? '';
-    if (!email || !emailInput?.checkValidity()) {
-      if (emailErr) {
-        emailErr.textContent = 'Enter a valid email.';
-        emailErr.classList.remove('hidden');
+    const raw = idInput?.value ?? '';
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      if (idErr) {
+        idErr.textContent = 'Enter your email or Braze External ID.';
+        idErr.classList.remove('hidden');
       }
       return;
     }
-    completeLoginSuccess(email);
+    if (trimmed.length > LOGIN_EXTERNAL_ID_MAX_LEN) {
+      if (idErr) {
+        idErr.textContent = `Use at most ${LOGIN_EXTERNAL_ID_MAX_LEN} characters.`;
+        idErr.classList.remove('hidden');
+      }
+      return;
+    }
+    const externalId = normalizeLoginExternalId(raw);
+    if (!externalId) {
+      if (idErr) {
+        idErr.textContent = 'Enter your email or Braze External ID.';
+        idErr.classList.remove('hidden');
+      }
+      return;
+    }
+    completeLoginSuccess(externalId);
   });
 
   syncDebugEventLogUi();

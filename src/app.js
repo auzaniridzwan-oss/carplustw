@@ -612,9 +612,9 @@ function syncHeroCarouselDom() {
   const slide = CAROUSEL_SLIDES[carouselIndex];
   section.style.backgroundImage = `linear-gradient(90deg, rgba(0, 38, 99, 0.65), rgba(0, 38, 99, 0.25)), url('${slide.imageUrl}')`;
   const content = section.querySelector('.hero-carousel-content');
-  const titleEl = content?.querySelector('h2');
+  const titleEl = content?.querySelector('.hero-carousel-title');
   if (titleEl) titleEl.textContent = slide.title;
-  const subtitleEl = content?.querySelector('h2 + p');
+  const subtitleEl = content?.querySelector('.hero-carousel-title + p');
   if (subtitleEl) subtitleEl.textContent = slide.subtitle;
   const dotsEl = section.querySelector('.carousel-dots');
   if (dotsEl) {
@@ -696,12 +696,8 @@ function render() {
       <section class="hero-carousel" style="background-image: linear-gradient(90deg, rgba(0, 38, 99, 0.65), rgba(0, 38, 99, 0.25)), url('${slide.imageUrl}')">
         <div class="hero-carousel-content">
           <p class="hero-eyebrow">Carplus Rental Offers</p>
-          <h2>${slide.title}</h2>
+          <h2 class="hero-carousel-title">${slide.title}</h2>
           <p>${slide.subtitle}</p>
-          <div class="hero-carousel-actions">
-            <button class="carousel-btn secondary-btn" id="carousel-prev">Previous</button>
-            <button class="carousel-btn primary-btn" id="carousel-next">Next</button>
-          </div>
           <div class="carousel-dots">${dots}</div>
         </div>
       </section>
@@ -849,13 +845,6 @@ function bindGlobalUiActions() {
   }
 
   if (currentStep === STEPS.SEARCH) {
-    document.getElementById('carousel-prev')?.addEventListener('click', () => {
-      carouselIndex = (carouselIndex - 1 + CAROUSEL_SLIDES.length) % CAROUSEL_SLIDES.length;
-      syncHeroCarouselDom();
-    });
-    document.getElementById('carousel-next')?.addEventListener('click', () => {
-      advanceCarousel();
-    });
     document.querySelector('.hero-carousel')?.addEventListener('click', (event) => {
       const target =
         event.target instanceof Element ? /** @type {HTMLElement | null} */ (event.target.closest('[data-carousel-index]')) : null;

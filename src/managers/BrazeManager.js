@@ -113,7 +113,7 @@ class BrazeManagerClass {
     try {
       const ok = braze.initialize(apiKey, {
         baseUrl,
-        enableLogging: Boolean(import.meta.env.DEV),
+        enableLogging: true,
         noCookies: false,
       });
       this._initialized = ok;
